@@ -1,0 +1,1213 @@
+<?xml version="1.0" encoding="Shift_JIS" standalone="yes" ?>
+<package>
+<job error="true" debug="false">
+<!-- <script language="VBScript" src="lib\skel.vbs"></script> -->
+<script language="VBScript">
+<![CDATA[
+option explicit
+'<!-- this line works as delimitre -->
+
+'= global definitions
+'==========================================================
+CONST CLASS_WM_TERMINATE_WAITTIME            = 1000
+CONST FUNCTION_ACTSEND_DELAY_COUNT           = 50
+CONST FUNCTION_ACTSEND_WAIT_TIME             = 100
+CONST FUNCTION_NEWCMD_TITLE_STRING           = "INFRA___"
+CONST FUNCTION_SEND_MAIL_ALWAYS_SEND         = false 'if false function returns object, for send a mail -> call method send_mail(param,...).send()
+CONST FUNCTION_SEND_MAIL_CONFIGURE_STRINGS   = "http://schemas.microsoft.com/cdo/configuration"
+CONST FUNCTION_PMAILER_SCHEMA_STRING         = "http://schemas.microsoft.com/cdo/configuration"
+CONST FUNCTION_DICTIONARY_FORMAT             = "^(.+?)\s*=>\s*(.*)$" 'for string, -> "^{(.+?)\s*=>*\s*(.*)(,(.+)\s*=>*\s*(.*))*}$"
+CONST FUNCTION_RNDSTRN_STRING                = ">N5`=/9&gQIS%K;?R#lD$4anwqXWr(+^F-\ETV}{\7bC:m]~O1kz!JP[sY8xd0AM<Z3U Gf.v*_6L@'juHBoteih)y2,pc"
+CONST FUNCTION_EXEC_RETURNS_STRINGS          = false
+CONST FUNCTION_PECHO_TIMEOUT_TIME            = 10
+CONST FUNCTION_CONFIGURE_SET_EMPTY           = false
+CONST FUNCTION_TH_LIMITCHECK_WAIT_TIME       = 500
+CONST FUNCTION_TH_LIMITCHECK_WAIT            = true
+CONST FUNCTION_TH_DO_TIME_PER_LAUNCH         = 100
+CONST FUNCTION_DB_QUERY2_CMD                 = "sqlcmd.exe " 'fix me!
+CONST FUNCTION_DB_QUERY2_CMD_OPTION          = " -E -l 1 -t 1 -w 10000 -s , -W -u -r1" 'fix me!
+CONST FUNCTION_ISPING_WAIT_TIME              = 100
+CONST FUNCTION_S2A_PADDING                   = false
+CONST FUNCTION_S2A_PADDING_CHAR              = " " 'a character
+CONST FUNCTION_UNIXTIME_OFFSET               = -9 'JST 
+CONST FUNCTION_UNIXTIME_BASIS                = "1970/01/01 00:00:00"
+
+'= global variables
+'==========================================================
+
+'-- flog
+'----------------------------------------------------------
+dim FUNCTION_FLOG_TYPENAME                   'flog0 -> logged to console (and echo(), echon() function is disabled)
+                                             'flog1 -> logged to `FUNCTION_FLOG_FILENAME`.log (no log-rotate)
+                                             'flog2 -> logged to "./yyyymmdd.log"
+                                             'flog3 -> logged to `FUNCTION_FLOG_FILENAME`.log, rotated at each execution
+                                             'flog4 -> logged to `FUNCTION_FLOG_FILENAME`.log, rotated at each day
+                                             'flog5 -> logged to `FUNCTION_FLOG_FILENAME`.log, rotated at each size
+                                             'if set /logbase option, adopt aan("logbase").log for log-filename on flog[1345]
+    FUNCTION_FLOG_TYPENAME                   = "flog0"
+dim FUNCTOIN_FLOG_LOGDIR                     'logdir
+    FUNCTOIN_FLOG_LOGDIR                     = "log"
+dim FUNCTION_FLOG_FILENAME                   'default log filename is `scriptname`.log. set by /logbase option.
+    FUNCTION_FLOG_FILENAME                   = empty
+dim FUNCTION_FLOG_EPID                       'emulated pid
+dim FUNCTION_FLOG_ROTATE_COUNT               'rotate count for "flog3","flog4","flog5" (default 5)
+    FUNCTION_FLOG_ROTATE_COUNT               = 5
+dim FUNCTION_FLOG_ROTATE_FILESIZE            'rotate size for "flog5" (default 10MB)
+    FUNCTION_FLOG_ROTATE_FILESIZE            = 1048576
+dim FUNCTION_FLOG_PERSISTNAME                'Also has changed the name of the log file during execution, 
+                                             'then the new file will not write until the end of the run.
+    FUNCTION_FLOG_PERSISTNAME                = true
+
+'-- datetime
+'----------------------------------------------------------
+dim FUNCTION_DATETIME_TYPENAME               'datetime0 -> 100114165801
+                                             'datetime1 -> 2010/11/41 16:58:01.12
+                                             'datetime2 -> 2010/11/41 16:58:01
+                                             'datetime3 -> 20101141165801
+    FUNCTION_DATETIME_TYPENAME               = "datetime1"
+
+'= functions
+'==========================================================
+
+'RETURN_TYPE FUNCTION_NAME(ARG_TYPE, ...) :: depend_FUNCTION_NAME, ... \COMMENT,...\
+'RETURN_TYPE :=
+' ? : boolean
+' + : string | value
+' * : object
+'   : void
+'ARG_TYPE :=
+' string : string
+' (specified_)*object : specified-object
+' object : object
+' array : array
+' value : !array and !object
+' void : void
+' variable : hensuu
+
+'-- #evaluation
+'----------------------------------------------------------
+'?e(!array) :: afso \full or relative path name\
+function e(n) : if not isarray(n) then : e = afso.fileexists(n) : else : e = false : end if : end function
+'?ef(!array) :: isvalue, afso
+function ef(n) : if not isarray(n) then : ef = afso.folderexists(n) : else : ef = false : end if : end function
+'?ea(!array) :: aarg \check existence of named arugment (like '/opt')\
+function ea(a) : if not isarray(a) then : ea = aarg.named.exists(a) : else : ea = false : end if : end function
+'?eau(!array) :: ea, aan \check existence of named and usable arugment (like '/opt:value')\
+function eau(a) : eau = (ea(a) and len(aan(a))>0) : end function
+'?ed(dictionary_object,string) :: isdictionary \ed() == dictionary_object.exist(key_string)\
+function ed(d,k) : if isdictionary(d) then : ed = d.exists(k) : else : ed = false : end if : end function
+'?ecmd(string) :: env, afso, e
+function ecmd(c) : dim a,b : for each b in split(env("%path%"),";") : b = afso.getabsolutepathname(b)&"\" : for each a in array("",".com",".exe",".bat",".cmd",".vbs",".js",".jar",".wsf") : if(e(b&c&a))then : ecmd = true : exit function : end if : next : next : ecmd = false : end function
+'?iscscript() :: afso \launch by cscript?\
+function iscscript() : iscscript = (instr(afso.getfilename(wscript.fullname),"cscript.exe")>0) : end function
+'+iif(boolean, void, void) :: bind
+function iif(c,t,f) : if(c) then : call bind(iif,t) : else : call bind(iif,f) : end if : end function
+'?isinteger(void) :: 
+function isinteger(v) : isinteger = cbool(vartype(v) = 2) : end function
+'?islong(void) :: 
+function islong(v) : islong = cbool(vartype(v) = 3) : end function
+'?issingle(void) :: 
+function issingle(v) : issingle = cbool(vartype(v) = 4) : end function
+'?isdouble(void) :: 
+function isdouble(v) : isdouble = cbool(vartype(v) = 5) : end function
+'?iscurrency(void) :: 
+function iscurrency(v) : iscurrency = cbool(vartype(v) = 6) : end function
+'?isstring(void) :: 
+function isstring(v) : isstring = cbool(vartype(v) = 8) : end function
+'?iserror(void) :: 
+function iserror(v) : iserror = cbool(vartype(v) = 10) : end function
+'?isboolean(void) :: 
+function isboolean(v) : isboolean = cbool(vartype(v) = 11) : end function
+'?isvariant(void) :: 
+function isvariant(v) : isvariant = cbool(vartype(v) = 12) : end function
+'?isdataobject(void) :: 
+function isdataobject(v) : isdataobject = cbool(vartype(v) = 13) : end function
+'?isbyte(void) :: 
+function isbyte(v) : isbyte = cbool(vartype(v) = 17) : end function
+'?isvalue(value) :: 
+function isvalue(v) : isvalue = not (isarray(v) or isobject(v)) : end function
+'?isdictionary(void) :: strcmp, adic
+function isdictionary(v) : isdictionary = strcmp(typename(v),typename(adic())) : end function
+'?ismatch(void) :: strcmp, getmatch
+function ismatch(v) : ismatch = strcmp(typename(v),typename(getmatch("",""))) : end function
+'?isnothing(void) :: strcmp
+function isnothing(n) : isnothing = strcmp(typename(n),typename(nothing)) : end function
+'?isprintable(value) :: isvalue, isnothing
+function isprintable(o) : isprintable = isvalue(o) and not (isnull(o) or isnothing(o)) : end function
+'?iswshexec(void) :: strcmp
+function iswshexec(c) : iswshexec = strcmp(typename(c),typename(ashell.exec("cmd.exe /C"))) : end function
+'?iswshexec_array(void) :: iswshexec \for th_* functions\
+function iswshexec_array(c) : dim a : iswshexec_array = true : if isarray(c) then : for each a in c : if not iswshexec(a) then : iswshexec_array = false : exit for : end if : next : else : iswshexec_array = iswshexec(a) : end if : end function
+'?isdb(void) :: strcmp, adb
+function isdb(c) : isdb = strcmp(typename(c),typename(adb())) : end function
+'?isroot(void) :: strcmp, ef, afso, env, iecho, isvalue
+function isroot(n) : isroot = false : if strcmp(typename(n),typename(afso.getfolder(env("%SYSTEMROOT%")))) then : isroot = n.isrootfolder : else : if isvalue(n) then : if ef(n) then : isroot = afso.getfolder(n).isrootfolder : else : iecho("(isroot) => not exist directory.") : isroot = false : end if : end if : end if : end function
+'?isping(value) :: exec, iif, FUNCTION_ISPING_WAIT_TIME
+function isping(n) : if isvalue(n) then : dim c : set c = exec("ping.exe -w 1 -n 1 -f "&n) : do until c.status <> 0 : wscript.sleep FUNCTION_ISPING_WAIT_TIME : loop : isping = iif(c.exitcode=0,true,false) : else : iecho("(isping) => wants (string)") : isping = false : end if : end function
+'?isdirectory(void) :: ef, strcmp, afso, getenv
+function isdirectory(o) : isdirectory = strcmp(typename(o), afso.getfolder(getenv("%SYSTEMROOT%"))) : if not (isdirectory or isobject(o)) then : isdirectory = ef(o) : end if : end function
+'?isrgp(void) :: strcmp
+function isrgp(o) : isrgp = strcmp(typename(o),typename(rgp(""))) : end function
+'?issubmatch(void) :: strcmp, getmatch 
+function issubmatch(o) : issubmatch = strcmp(typename(o),typename(getmatch("t","(t)")(0).submatches)) : end function
+'?isfile(void) :: afso, strcmp
+function isfile(o) : isfile = strcmp(typename(o),typename(afso.getfile(wscript.scriptfullname))) : end function
+'?isfolder() :: afso, strcmp
+function isfolder(o): isfolder = strcmp(typename(o),typename(afso.getfolder(afso.getparentfoldername(wscript.scriptfullname)))) : end function
+'?isinarray(array, string) :: rmatch, iecho \\
+function isinarray(a,t) : dim b : if isarray(a) then : for each b in a : if rmatch(typename(b),t) then : isinarray = true : exit function : end if : next : else : iecho("(isinarray) => wants (array, regexp_string)") : end if : isinarray = false : end function
+'?inarray(array, value) :: iecho
+function inarray(a,v) : dim d : if isarray(a) then : for each d in a : if (d=v) then : inarray = true : exit function : end if : next : else : iecho("(inarray) => wants (array, value)") : end if : inarray = false : end function
+'?isindictionary(dictionary_object, string) :: isdictionary, rmatch, iecho
+function isindictionary(d,t) : dim b : if isdictionary(d) then : for each b in d : if rmatch(typename(d(b)),t) then : isindictionary = true : exit function : end if : next : else : iecho("(isindictionary) => wants (dictionary, regexp_string)") : end if : isindictionary = false : end function
+'?indictionary(dictionary, value) :: isdictionary, iecho 
+function indictionary(d,v) : dim b : if isdictionary(d) then : for each b in d : if (d(b)=v) then : indictionary = true : exit function : end if : next : else : iecho("(indictionary) => wants (dictionary, value)") : end if : indictionary = false : end function
+'?isusewmi() :: 
+function isusewmi() : on error resume next : call getobject("winmgmts:\\.\root\cimv2") : if err.number <> 0 then : isusewmi = false : err.clear : else : isusewmi = true : end if : end function
+'?istextstream(void) :: strcmp, frs
+function istextstream(v) : istextstream = strcmp(typename(v),typename(frs(wscript.scriptfullname))) : end function
+'?isstream(void) :: strcmp, fsread
+function isstream(v) : isstream = strcmp(typename(v),typename(fsread(wscript.scriptfullname))) : end function
+'?isxml(object) :: strcmp, axml
+function isxml(o) : isxml = strcmp(typename(o),typename(axml())) : end function
+'?isxmlchild(object) :: strcmp
+function isxmlchild(o) : isxmlchild = strcmp(typename(o),"IXMLDOMNodeList") : end function
+
+
+'-- #bind
+'----------------------------------------------------------
+'bind(variable,void) :: 
+function bind(byref k,byval v) : if(isobject(v)) then : set k = v : else k = v : end if : end function
+'caller(function) :: bind \caller function\
+function caller(fnc) : call bind(caller, fnc) : end function
+
+'-- #regexpression
+'----------------------------------------------------------
+'*rgo(string, string) :: \(pattern_string, option [igo])\
+function rgo(p,o) : set rgo = new regexp : rgo.pattern = p : rgo.ignorecase = (instr(o,"i")>0) : rgo.global = (instr(o,"g")>0) : rgo.multiline = (instr(o,"o")>0) : end function
+'*rgp(string) :: \(pattern_string)\
+function rgp(p) : set rgp = new regexp : rgp.pattern = p : end function
+'?rmatch(string, string) :: rgp \(target_string, pattern_string)\
+function rmatch(s,p) : rmatch = rgp(p).test(s) : end function
+'?rmatchi(string, string) :: rgo \(target_string, pattern_string)\
+function rmatchi(s,p) : rmatchi = rgo(p,"i").test(s) : end function
+'*getmatch(string, string) :: rgo \(target_string, pattern_string)\
+function getmatch(s,p) : set getmatch = rgo(p,"g").execute(s) : end function
+'*getsubmatch(string, string) :: getmatch, \(target_string, pattern_string), pattern must inlcude ()\
+function getsubmatch(s,p) : dim i,g : set g = getmatch(s,p) : if (g.count>0) then : for i=0 to g.count-1 : if (g(i).submatches.count>0) then : set getsubmatch = g(i).submatches : end if : next : end if : end function
+'+rreplace(string, string, string) :: rgo \(target_string, pattern_string, replacement_string)\
+function rreplace(s,p,r) : rreplace = rgo(p,"g").replace(s,r) : end function
+'+rremove(string, string) :: rreplace \(target_string, pattern_string)\
+function rremove(s,p) : rremove = rreplace(s,p,"") : end function
+
+'-- #strings
+'----------------------------------------------------------
+'?strcmp(string, string) :: isstring, iecho \strcmp returns loose match result, strcmp("Test","test") == true\
+function strcmp(s,t) : if isstring(s) and isstring(t) then : strcmp = ((instr(lcase(s),lcase(t))>0) and len(s) = len(t)) else : iecho("(strcmp) => wants (string, string), gave ("&typename(s)&", "&typename(t)&")") : strcmp = false : end if : end function
+'rstrcmp(string, string) :: isstring, iecho \rstrcmp returns strict match result, rstrcmp("Test","test") == false\
+function rstrcmp(s,t) : if isstring(s) and isstring(t) then : rstrcmp = (s=t) : else : iecho("(rstrcmp) => wants (string, string), gave ("&typename(s)&", "&typename(t)&")") : rstrcmp = false : end if : end function
+'+dleft(string, integer) :: isstring, isinteger \delete left\
+function dleft(s,n) : if isstring(s) and isinteger(n) then : if (len(s)>=n) then : dleft = right(s,len(s)-n) : else : dleft = "" : end if : end if : end function
+'+eft(string, integer) :: dleft 
+function eft(s,n) : eft = dleft(s,n) : end function
+'+dright(string, integer) :: isstring, isinteger 
+function dright(s,n) : if isstring(s) and isinteger(n) then : if (len(s)>=n) then : dright = left(s,len(s)-n) : else : dright = "" : end if : end if : end function
+'+righ(string, integer) :: dright
+function righ(s,n) : righ = dright(s,n) : end function
+'+replicate(string, integer) :: isstring, isinteger
+function replicate(s,a) : if isstring(s) and isinteger(a) then : replicate = string(a,s) : end if : end function
+'+padding(value, string, integer) :: isvalue, isstring, isinteger, iecho
+function padding(s,p,n) : if isvalue(s) and isstring(p) and isinteger(n) then : if(len(s)>=n) then : padding = s : else : if (len(p)>0 and n>len(s)) then : padding = string(n-len(s),p)&s : else : eechon("(padding) => invalid padding string.") : end if : end if : else : iecho("(padding) => wants (value, string, integer)") : end if : end function
+'+epadding(value, string, integer) :: isvalue, isstring, isinteger, iecho
+function epadding(s,p,n) : if isvalue(s) and isstring(p) and isinteger(n) then : if(len(s)>=n) then : epadding = s : else : if (len(p)>0 and n>len(s)) then : epadding = s&string(n-len(s),p) : else : eechon("(epadding) => invalid padding string.") : end if : end if : else : iecho("(epadding) => wants (value, string, integer)") : end if : end function
+'+revstr(string) :: isstring, iecho
+function revstr(s) : if isstring(s) then : dim c,n,i : for i=len(s) to 1 step -1 : c = mid(s,i,1) : n = n&c : next : revstr = n : else : iecho("(revstr) => wants (string)") : end if : end function
+'+reverse(string) :: revstr
+function reverse(s) : reverse = revstr(s) : end function
+
+'-- #transform
+'----------------------------------------------------------
+'e.g. s2a("test, test1, test2",",")
+'e.g. s2a("test, test1, test2",3)
+'+s2a(string, value) :: isstring, isinteger, push, dleft, FUNCTION_S2A_PADDING, FUNCTION_S2A_PADDING_CHAR \\
+function s2a(s,d) : if(isstring(d)) then : s2a = split(s,d) : else : if(isinteger(d)) then : dim a : a = array() : do until (len(s)<=0) : call push(a,left(s,d)) : s = dleft(s,d) : loop : if FUNCTION_S2A_PADDING then : if (len(a(ubound(a)))<d) then : a(ubound(a)) = a(ubound(a))&string(d-len(a(ubound(a))),FUNCTION_S2A_PADDING_CHAR) : end if : end if : s2a = a : else : s2a = array() : end if : end if : end function
+'+f2a(string) :: e, fread, push, iecho \(filename)\
+function f2a(n) : if e(n) then : dim f,o : o = array() : set f = fread(n) : do until f.atendofstream : call push(o,f.readline) : loop : f2a = o : else : iecho("(f2a) => file is missing ("&n&")") : f2a = array() : end if : end function
+'+f2v(string) :: e, fcat, iecho \(filename)\
+function f2v(n) : if e(n) then : f2v = fcat(n) : else : iecho("(f2v) => file is missing ("&n&")") : f2v = "" : end if : end function
+'+au2a() :: aarg \skel.wsf a b c / /: /:1 => array("a","b","c")\
+function au2a() : dim i,a : redim a(aarg.unnamed.count-1) : for i=0 to aarg.unnamed.count-1 : a(i) = aarg.unnamed(i) : next : au2a = a : end function
+'+an2a() :: aarg, aan \skel.wsf a b c / /a /a: /a:1 => array("",empty,"a",empty,"a","","a","1") (opt_name, opt_value, ...)\
+function an2a() : dim n,b,a() : redim a(0) : b = 0 : for each n in aarg.named : redim preserve a((b+1)*2-1) : a(2*b) = n : a(2*b+1) = aan(n) : b = b + 1 : next : an2a = a : end function
+'*f2drs(string, string, integer, integer) :: f2d \(filename, array(regexp_pattern, keyno, value_no))\
+function f2drs(n,format, keyno, valno) : set f2drs = f2d(n,array(format, keyno, valno)) : end function
+'*f2dr(string, string, string) :: f2d \(filename, array(regexp_pattern, delim_string))\
+function f2dr(n, format, delim) : set f2dr = f2d(n,array(format, delim)) : end function
+'e.g. f2d("test.txt", ",")
+'e.g. f2d("test.txt", array("^.*=.*$","="))
+'e.g. f2d("test.txt", array("^(.*)=(.*)$",0,1))
+'*f2d(string, array) :: adic, e, frs, rmatch, iif, getmatch, ed, eecho, max \f2d has 3 pattern to transform. (str,str), (str,arr(str,str)) or (str,arr(str,int,int))\
+function f2d(n,arr) : dim d : set d = adic() : if e(n) then : dim f,b : set f = frs(n) : if isarray(arr) then : if (ubound(arr)=2) then : if rmatch(arr(1),"^\d\d*$") and rmatch(arr(2),"^\d\d*$") then : dim m : m = max(arr(1),arr(2)) + 1 : do until f.atendofstream : b = f.readline : if rmatch(b,arr(0)) then : set b = getmatch(b,arr(0)) : if (b(0).submatches.count>=m) then : if ed(d, trim(b(0).submatches(arr(1)))) then : d(trim(b(0).submatches(arr(1)))) = b(0).submatches(arr(2)) : else : d.add trim(b(0).submatches(arr(1))), b(0).submatches(arr(2)) : end if : else : eechon("(f2d) => illegal submatches("&b(0).submatches.count&":"&arr(1)&","&arr(2)&")") : exit do : end if : end if : loop : end if : else : do until f.atendofstream : b = f.readline : if rmatch(b,arr(0)) then : b = split(b,arr(1)) : if ed(d,trim(b(0))) then : d(trim(b(0))) = b(1) : else : d.add trim(b(0)), b(1) : end if : end if : loop : end if : else : do until f.atendofstream : b = f.readline : if(instr(b,arr)) then : b = split(b,arr) : if ed(d,trim(b(0))) then : d(trim(b(0))) = b(1) : else : d.add trim(b(0)), b(1) : end if : end if : loop : end if : end if : set f2d = d : end function
+'+a2s(array, string) :: isstring 
+function a2s(a,s) : if isarray(a) and isstring(s) then : dim v : for v = 0 to ubound(a)-1 : a2s = a2s&a(v)&s : next : a2s = a2s&a(v) : else : a2s = empty : end if : end function
+'*a2d(array) :: dictionary, iecho,FUNCTION_DICTIONARY_FORMAT
+function a2d(a) : if isarray(a) then : dim f,v : f = true : for each v in a : if not (instr(v,"=>")>0) then : f = false : end if : next : if f then : set a2d = dictionary(a) : else : iecho("(a2d) => wants (array) have '"&FUNCTION_DICTIONARY_FORMAT&"' pattern.") : set a2d = adic() : end if : : else : iecho("(a2d) => wants (array)") : end if end function
+'*s2d(string) :: dictionary, rmatch, iecho, adic, FUNCTION_DICTIONARY_FORMAT
+function s2d(s) : if isstring(s) then : if rmatch(s,"^{.*}$") then : set s2d = dictionary(s) : else : iecho("(s2d) => wants (string) have'"&replace(replace(FUNCTION_DICTIONARY_FORMAT,"^","^{"),"$","}$")&"' pattern.") : set s2d = adic() : end if : else : iecho("(s2d) => wants (string)") : end if: end function
+'+d2a(dictionary) :: isdictionary, isstring, iif, strcmp, iecho \\
+function d2a(d) : if isdictionary(d) then : dim b : d2a = "{" : for each b in d : d2a = d2a&b&" => " : if isstring(d(b)) then : d2a = d2a&iif(strcmp(d(b),","),""""&replace(d(b),",","chr(44)")&"""",""""&d(b)&"""")&"," : else : d2a = d2a&iif(isdate(d(b)),"#"&d(b)&"#",d(b))&", " : end if : next : d2a = d2a&"}" : else : iecho("(d2a) => wants (dictionary)") : d2a = array() : end if : end function
+'+cast(value, string) :: strcmp
+function cast(v,t) : on error resume next : if strcmp(t,"int") or strcmp(t,"integer") then : cast = cint(v) : end if : if strcmp(t,"str") or strcmp(t,"string") then : cast = cstr(v) : end if : if strcmp(t,"date") or strcmp(t,"time") or strcmp(t,"datetime") then : cast = cdate(v) : end if : if strcmp(t,"lng") or strcmp(t,"long") then : cast = clng(v) : end if : if strcmp(t,"sng") or strcmp(t,"single") then : cast = csng(v) : end if : if strcmp(t,"dbl") or strcmp(t,"double") then : cast = cdbl(v) : end if : if strcmp(t,"bool") or strcmp(t,"boolean") then : cast = cbool(v) : end if : if strcmp(t,"byte") then : cast = cbyte(v) : end if : if strcmp(t,"cur") or strcmp(t,"currency") or strcmp(t,"money") then : cast = ccur(v) : end if : if err.number <> 0 then : iecho("(cast) => cannot cast '"&v&"' as '"&t&"', cast returns empty.") : cast = empty : end if : end function
+
+'-- #calculation
+'----------------------------------------------------------
+'+floor(numeric) :: iif
+function floor(v) : if isnumeric(v) then : floor = iif(v>0,fix(v),fix(v-0.9999999)) : else : iecho("(floor) => wants (numeric)") : end if : end function
+'+ceil(numeric) :: iif
+function ceil(v) : if isnumeric(v) then : ceil = iif(v>0,fix(v+0.9999999),fix(v)) : else : iecho("(ceil) => wants (numeric)") : end if : end function
+'+hstep(numeric) :: ustep, iecho
+function hstep(v) : if isnumeric(v) then : if (v=0) then : hstep = 0.5 : else : hstep = ustep(v) : end if : else : iecho("(hstep) => wants (numeric)") : end if : end function
+'+ustep(numeric) :: iif, iecho
+function ustep(v) : if isnumeric(v) then : ustep = iif(v>=0,1,0) : else : iecho("(ustep) => wants (numeric)") : end if : end function
+'+tarai(numeric, numeric, numeric) :: \taraimawashi-function\
+function tarai(x,y,z) : if (x<=y) then : tarai = y : else : tarai = tarai(tarai(x-1,y,z),tarai(y-1,z,x),tarai(z-1,x,y)) : end if : end function
+'+tak(numeric, numeric, numeric) :: 
+function tak(x,y,z) : if (x<=y) then : tak = z : else : tak = tak(tak(x-1,y,z),tak(y-1,z,x),tak(z-1,x,y)) : end if : end function
+'+max(value, value) :: iif, isvalue
+function max(v,r) : if isvalue(v) and isvalue(r) then : max = iif(v>r,v,r) : end if : end function
+'+min(value, value) :: iif, isvalue
+function min(v,r) : if isvalue(v) and isvalue(r) then : min = iif(v<r,v,r) : end if : end function
+
+'-- #bit calculation
+'----------------------------------------------------------
+'+sl(numeric, integer) :: isinteger, iecho, eecho,
+function sl(x,n) : if not(isinteger(n) and isnumeric(x)) then : iecho("(sl) => wants (numeric, integer)") : else : if n<0 or n>32 then : eechon("(sl) => invalid number("&n&")") : exit function : end if : if n=0 then : sl = x : else : dim k,d,c : k = clng(2^(32-n-1)) : d = x and (k-1) : c = d*clng(2^n) : if x and k then : c = c or &H80000000 : end if : sl = c : end if : end if : end function
+'+sr(numeric, integer) :: isinteger, iecho, eecho
+function sr(x,n) : if not(isinteger(n) and isnumeric(x)) then : iecho("(sr) => wants (numeric, integer)") : else : if n<0 or n>32 then : eechon("(sl) => invalid number("&n&")") : exit function : end if : if n=0 then : sl = x : else : dim y,z : y = x and &H7FFFFFFF : if n = 32-1 then : z = 0 : else : z = y \ clng(2^n) : end if : if y<>x then : z = z or clng(2^(32-n-1)) : end if : sr = z : end if : end if : end function
+'+add(numeric, numeric) :: iecho
+function add(a,b) : if isnumeric(a) and isnumeric(b) then : dim c : c = ccur(a) + ccur(b) : if c > &H7FFFFFFF then : c = c-ccur(2^32) : else : if c < &H80000000 then : c = c+ccur(2^32) : end if : end if : add = clng(c) : else : iecho("(add) => wants (numeric, numeric)") : end if : end function
+
+'-- #md5 transform
+'----------------------------------------------------------
+'+md5_ba(string) :: s2a, push, iecho /("test") => (array(116,101,115,116))/
+function md5_ba(s) : if isstring(s) then : dim c,r : r = array() : for each c in s2a(s,1) : call push(r,asc(c)) : next : md5_ba = r : else : iecho("(md5_ba) => wants (string)") : end if : end function
+'+md5_fx(long, long, long) ::
+function md5_fx(x,y,z) : md5_fx = (x and y) or ((not x) and z) : end function
+'+md5_gx(long, long, long) ::
+function md5_gx(x,y,z) : md5_gx = (x and z) or (y and (not z)) : end function
+'+md5_hx(long, long, long) ::
+function md5_hx(x,y,z) : md5_hx = x xor y xor z : end function
+'+md5_ix(long, long, long) ::
+function md5_ix(x,y,z) : md5_ix = y xor (x or (not z)) : end function
+'+md5_rotate_left(numeric, integer) :: sl, sr
+function md5_rotate_left(x,n) : md5_rotate_left = sl(x, n) or sr(x, 32 - n) : end function
+'md5_ff(long,long,long,long,numeric,numeric,numeric) :: md5_fx, add,md5_rotate_left
+function md5_ff(byref a,b,c,d,x,s,ac) : a = add(add(add(a, md5_fx(b, c, d)), x), ac) : a = md5_rotate_left(a, s) : a = add(a, b) : end function
+'md5_gg(long,long,long,long,numeric,numeric,numeric) :: md5_fx, add,md5_rotate_left
+function md5_gg(byref a,b,c,d,x,s,ac) : a = add(add(add(a, md5_gx(b, c, d)), x), ac) : a = md5_rotate_left(a, s) : a = add(a, b) : End function
+'md5_hh(long,long,long,long,numeric,numeric,numeric) :: md5_fx, add,md5_rotate_left
+function md5_hh(byref a,b,c,d,x,s,ac) : a = add(add(add(a,md5_hx(b, c, d)), x), ac) : a = md5_rotate_left(a, s) : a = add(a, b) : End function
+'md5_ii(long,long,long,long,numeric,numeric,numeric) :: md5_fx, add,md5_rotate_left
+function md5_ii(byref a,b,c,d,x,s,ac) : a = add(add(add(a, md5_ix(b, c, d)), x), ac) : a = md5_rotate_left(a, s) : a = add(a, b) : End function
+'md5_init(long,long,long) :: 
+function md5_init(byref state, byref count, byref buffer) : count(0) = 0 : count(1) = 0 : state(0) = &H67452301 : state(1) = &HEFCDAB89 : state(2) = &H98BADCFE : state(3) = &H10325476 : End function
+'md5_update(long,long,long,long,long) :: add,sl,sr,md5_memcpy, md5_transform
+function md5_update(byref state, byref count, byref buffer, byref inputx, inputlen) : dim i,index,partlen : index = sr(count(0), 3) and &h3f : count(0) = add(count(0), sl(inputlen, 3)) : if count(0) < sl(inputlen, 3) then : count(1) = add(count(1), 1) : end if : count(1) = add(count(1), sr(inputlen, 29)) : partlen = 64 - index : if inputlen >= partlen then : call md5_memcpy(buffer, index, inputx, 0, partlen) : call md5_transform(state, buffer, 0) : for i = partlen to inputlen - 63 - 1 step 64 : call md5_transform(state, inputx, i) : next : index = 0 : else : i = 0 : end if : call md5_memcpy(buffer, index, inputx, i, inputlen - i) : end function
+'md5_final() :: md5_encode, md5_update,
+function md5_final(byref digest, byref state, byref count, byref buffer) : dim bits(7),index,padlen : call md5_encode(bits, count, 8) : index = sr(count(0), 3) and &h3f : if index < 56 then : padlen = 56 - index : else : padlen = 120 - index : end if : dim pad : pad = array(&h80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) : call md5_update(state, count, buffer, pad, padlen) : call md5_update(state, count, buffer, bits, 8) : call md5_encode(digest, state, 16) : dim i : for i = 0 to ubound(state) : state(i) = 0 : next : for i = 0 to ubound(count) : count(i) = 0 : next : for i = 0 to ubound(buffer) : buffer(i) = 0 : next : end function : 
+'md5_transform() :: md5_decode, md5_ff, md5_gg, md5_hh, md5_ii,
+function md5_transform(ByRef state, ByRef block, ByVal offset) : Dim i,a,b,c,d,x(15) : a = state(0) : b = state(1) : c = state(2) : d = state(3) : call md5_decode(x, block, offset, 64) : call md5_ff(a, b, c, d, x( 0), 7, &HD76AA478) : call md5_ff(d, a, b, c, x( 1), 12, &HE8C7B756) : call md5_ff(c, d, a, b, x( 2), 17, &H242070DB) : call md5_ff(b, c, d, a, x( 3), 22, &HC1BDCEEE) : call md5_ff(a, b, c, d, x( 4), 7, &HF57C0FAF) : call md5_ff(d, a, b, c, x( 5), 12, &H4787C62A) : call md5_ff(c, d, a, b, x( 6), 17, &HA8304613) : call md5_ff(b, c, d, a, x( 7), 22, &HFD469501) : call md5_ff(a, b, c, d, x( 8), 7, &H698098D8) : call md5_ff(d, a, b, c, x( 9), 12, &H8B44F7AF) : call md5_ff(c, d, a, b, x(10), 17, &HFFFF5BB1) : call md5_ff(b, c, d, a, x(11), 22, &H895CD7BE) : call md5_ff(a, b, c, d, x(12), 7, &H6B901122) : call md5_ff(d, a, b, c, x(13), 12, &HFD987193) : call md5_ff(c, d, a, b, x(14), 17, &HA679438E) : call md5_ff(b, c, d, a, x(15), 22, &H49B40821) : call md5_gg(a, b, c, d, x( 1), 5, &HF61E2562) : call md5_gg(d, a, b, c, x( 6), 9, &HC040B340) : call md5_gg(c, d, a, b, x(11), 14, &H265E5A51) : call md5_gg(b, c, d, a, x( 0), 20, &HE9B6C7AA) : call md5_gg(a, b, c, d, x( 5), 5, &HD62F105D) : call md5_gg(d, a, b, c, x(10), 9, &H2441453) : call md5_gg(c, d, a, b, x(15), 14, &HD8A1E681) : call md5_gg(b, c, d, a, x( 4), 20, &HE7D3FBC8) : call md5_gg(a, b, c, d, x( 9), 5, &H21E1CDE6) : call md5_gg(d, a, b, c, x(14), 9, &HC33707D6) : call md5_gg(c, d, a, b, x( 3), 14, &HF4D50D87) : call md5_gg(b, c, d, a, x( 8), 20, &H455A14ED) : call md5_gg(a, b, c, d, x(13), 5, &HA9E3E905) : call md5_gg(d, a, b, c, x( 2), 9, &HFCEFA3F8) : call md5_gg(c, d, a, b, x( 7), 14, &H676F02D9) : call md5_gg(b, c, d, a, x(12), 20, &H8D2A4C8A) : call md5_hh(a, b, c, d, x( 5), 4, &HFFFA3942) : call md5_hh(d, a, b, c, x( 8), 11, &H8771F681) : call md5_hh(c, d, a, b, x(11), 16, &H6D9D6122) : call md5_hh(b, c, d, a, x(14), 23, &HFDE5380C) : call md5_hh(a, b, c, d, x( 1), 4, &HA4BEEA44) : call md5_hh(d, a, b, c, x( 4), 11, &H4BDECFA9) : call md5_hh(c, d, a, b, x( 7), 16, &HF6BB4B60) : call md5_hh(b, c, d, a, x(10), 23, &HBEBFBC70) : call md5_hh(a, b, c, d, x(13), 4, &H289B7EC6) : call md5_hh(d, a, b, c, x( 0), 11, &HEAA127FA) : call md5_hh(c, d, a, b, x( 3), 16, &HD4EF3085) : call md5_hh(b, c, d, a, x( 6), 23, &H4881D05) : call md5_hh(a, b, c, d, x( 9), 4, &HD9D4D039) : call md5_hh(d, a, b, c, x(12), 11, &HE6DB99E5) : call md5_hh(c, d, a, b, x(15), 16, &H1FA27CF8) : call md5_hh(b, c, d, a, x( 2), 23, &HC4AC5665) : call md5_ii(a, b, c, d, x( 0), 6, &HF4292244) : call md5_ii(d, a, b, c, x( 7), 10, &H432AFF97) : call md5_ii(c, d, a, b, x(14), 15, &HAB9423A7) : call md5_ii(b, c, d, a, x( 5), 21, &HFC93A039) : call md5_ii(a, b, c, d, x(12), 6, &H655B59C3) : call md5_ii(d, a, b, c, x( 3), 10, &H8F0CCC92) : call md5_ii(c, d, a, b, x(10), 15, &HFFEFF47D) : call md5_ii(b, c, d, a, x( 1), 21, &H85845DD1) : call md5_ii(a, b, c, d, x( 8), 6, &H6FA87E4F) : call md5_ii(d, a, b, c, x(15), 10, &HFE2CE6E0) : call md5_ii(c, d, a, b, x( 6), 15, &HA3014314) : call md5_ii(b, c, d, a, x(13), 21, &H4E0811A1) : call md5_ii(a, b, c, d, x( 4), 6, &HF7537E82) : call md5_ii(d, a, b, c, x(11), 10, &HBD3AF235) : call md5_ii(c, d, a, b, x( 2), 15, &H2AD7D2BB) : call md5_ii(b, c, d, a, x( 9), 21, &HEB86D391) : state(0) = add(state(0), a) : state(1) = add(state(1), b) : state(2) = add(state(2), c) : state(3) = add(state(3), d) : for i = 0 to ubound(x) : x(i) = 0 : next : end function
+'md5_encode() :: sr
+function md5_encode(ByRef output, ByRef inputx, ByVal lenx) : Dim i,j : i = 0 : j = 0 : do while j < lenx : output(j) = inputx(i) and &HFF : output(j + 1) = sr(inputx(i), 8) and &HFF : output(j + 2) = sr(inputx(i), 16) and &HFF : output(j + 3) = sr(inputx(i), 24) and &HFF : i = i + 1 : j = j + 4 : Loop : End function
+'md5_decode() :: sl
+function md5_decode(byref output, byref inputx, byval inputxoffset, byval lenx) : dim i,j,k : i = 0 : j = 0 : do while j < lenx : k = j + inputxoffset : output(i) = inputx(k) or sl(inputx(k + 1), 8) or sl(inputx(k + 2), 16) or sl(inputx(k + 3), 24) : i = i + 1 : j = j + 4 : loop : end function
+'md5_memcpy() :: 
+function md5_memcpy(byref output, byval outputoffset, byref inputx, byval inputxoffset, byval lenx) : dim i : for i = 0 to lenx - 1 : output(i + outputoffset) = inputx(i + inputxoffset) : next : end function
+'md5_string(string) :: md5_init, md5_update, md5_final, md5_print
+function md5_string(byval stringx) : dim state(3),count(1),buffer(63),digest(15),lenx : lenx = len(stringx) : call md5_init(state, count, buffer) : call md5_update(state, count, buffer, md5_ba(stringx), lenx) : call md5_final(digest, state, count, buffer) : md5_string = md5_print(digest) : end function
+'md5_print() :: 
+function md5_print(digest) : dim s,i : s = "" : for i = 0 to 16 - 1 : s = s & right("00" & lcase(hex(digest(i))), 2) : next : md5_print = s : end function
+
+'-- #utilities
+'----------------------------------------------------------
+'--- #system
+'----------------------------------------------------------
+'halt() :: log 
+function halt() : log("(halt) => script halt("&err.description&")") : wscript.quit(err.number) : end function
+'level_integer :=
+'0  SUCCESS
+'1  ERROR
+'2  WARNING
+'4  INFORMATION
+'8  AUDIT_SUCCESS
+'16 AUDIT_FAILURE
+'+evt(integer, string) :: isinteger, isstring, ashell, flog, 
+function evt(l,s) : if isinteger(l) and isstring(s) then : ashell.logevent l, s : evt = flog("(evt) => "&l&", "&s) : else : call evt(4, "(evt) => wants (integer, string), gave ("&typename(l)&", "&typename(s)&")") : end if : end function
+'raiseerror(string) :: isstring, eecho, evt
+function raiseerror(s) : if isstring(s) then : eechon(s) : raiseerror = evt(1,s) : end if : end function
+'raisewarn(string) :: isstring, eecho, evt
+function raisewarn(s) : if isstring(s) then : wecho(s) : raisewarn = evt(2,s) : end if : end function
+'raiseinfo(string) :: isstring, eecho, evt
+function raiseinfo(s) : if isstring(s) then : iecho(s) : raiseinfo = evt(4,s) : end if : end function
+
+'--- #path
+'----------------------------------------------------------
+'mkdir(value) :: isvalue, ef, parentfolder, absolutepath, iecho 
+function mkdir(p) : if isvalue(p) then : if not ef(parentfolder(absolutepath(p))) then : call mkdir(parentfolder(absolutepath(p))) : end if : if not ef(absolutepath(p)) then : afso.createfolder(absolutepath(p)) : end if : else : iecho("(mkdir) => wants (value)") : end if : end function
+'+gp(array) :: rreplace, iecho \generate path-string array("folder\","\test","a\aa") -> "folder\test\a\aa" \
+function gp(a) : if isarray(a) then : gp = rreplace(join(a,"\"),"\\\\*","\") : else : iecho("(gp) => wants (array)") : end if : end function
+'basename(value) :: isfolder, isfile, afso, iecho, isvalue
+function basename(p) : if isfolder(p) or isvalue(p) or isfile(p) then : basename = afso.getbasename(p) : else : iecho("(basename) => wants (folder_object/file_object/value)") : end if : end function
+'filename(value) :: isfolder, isfile, afso, iecho, isvalue
+function filename(p) : if isfolder(p) or isvalue(p) or isfile(p) then : filename = afso.getfilename(p) : else : iecho("(filename) => wants (folder_object/file_object/value)") : end if : end function
+'absolute(value) :: isfolder, isfile, afso, iecho, isvalue
+function absolutepath(p) : if isfolder(p) or isvalue(p) or isfile(p) then : absolutepath = afso.getabsolutepathname(p) : else : iecho("(absolutepath) => wants (folder_object/file_object/value)") : end if : end function
+'extension(value) :: isfolder, isfile, afso, iecho, isvalue
+function extension(p) : if (isfolder(p) or isvalue(p) or isfile(p)) and (isfolder(d) or isvalue(d) or isfile(d)) then : extension = afso.getextensionname(p) : else : iecho("(extension) => wants (folder_object/file_object/value)") : end if : end function
+'parentfolder(value) :: isfolder, isfile, afso, iecho, isvalue
+function parentfolder(p) : if isfolder(p) or isvalue(p) or isfile(p) then : parentfolder = afso.getparentfoldername(p) : else : iecho("(parentfolder) => wants (folder_object/file_object/value)") : end if : end function
+'drivename(value) :: isfolder, isfile, afso, iecho, isvalue
+function drivename(p) : if isfolder(p) or isvalue(p) or isfile(p) then : drivename = afso.getdrivename(p) : else : iecho("(drivename) => wants (folder_object/file_object/value)") : end if : end function
+'buildpath(value, value) :: isfolder, isfile, isvalue, afso, iecho
+function buildpath(s,d) : if (isfolder(s) or isvalue(s) or isfile(s)) and (isfolder(d) or isvalue(d) or isfile(d)) then : buildpath = afso.buildpath(s,d) : else : iecho("(buildpath) => wants (folder_object/file_object/value)") : end if : end function
+
+'--- #random
+'----------------------------------------------------------
+'+rndstr(value) :: isvalue, isstring, rand, eecho \returns [a-zA-Z0-9]{,length}\
+function rndstr(l) : if isnumeric(l) then : if (l>=1) then : randomize(timer) : do until (int(l) <= len(rndstr)) : select case rand(1,3) : case 1 : rndstr = rndstr&chr(rand(48,56)) : case 2 : rndstr = rndstr&chr(rand(65,90)) : case else : rndstr = rndstr&chr(rand(97,122)) : end select : loop : else : eechon("(rndstr) => wants more length.") : end if : else : eechon("(rndstr) => wants (numeric), gave ("&typename(l)&")") : end if : end function
+'+rndstrn(value) :: isvalue, s2a, rand, eecho, FUNCTION_RNDSTRN_STRING \returns FUNCTION_RNDSTRN_STRING\
+function rndstrn(l) : if isnumeric(l) then : if (l>=1) then : dim a : a = s2a(FUNCTION_RNDSTRN_STRING,1) : randomize(timer) : do until l <= len(rndstrn) : rndstrn = rndstrn&a(rand(0,cint(ubound(a)))) : loop : else : eechon("(rndstrn) => wants more length") : end if : else : eechon("(rndstrn) => wants (numeric), gave ("&typename(l)&")") : end if : end function
+'+rand(integer,integer) :: isinteger, eecho 
+function rand(n,m) : if isinteger(n) and isinteger(m) then : randomize(timer) : rand = int((m-n+1)*rnd()+n) : else : eechon("(rand) => wants (integer)") : end if : end function
+
+'--- #skelmisc
+'----------------------------------------------------------
+'+typecast(string) :: rmatch, rremove, dictionary
+function typecast(s) : if(rmatch(s,"^([Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee])$")) then : typecast = cbool(s) : else : if(rmatch(s,"^"".*""$")) then : s = rremove(s,"(^"")|(""$)") : if rmatch(s,"^%dic%\{.*\}$") then : set typecast = dictionary(rremove(s,"^%dic%")) : else : if rmatch(s,"^%arr%\(.*\)$") then : typecast = split(rremove(s,"^%arr%\(|\)$"),",") : else : typecast = s : end if : end if : else : if(rmatch(s,"^#.*#$")) then : typecast = cdate(rremove(s,"(^#)|(#$)")) : else : if(isnumeric(s)) then : typecast = eval(s) : else : typecast = s : end if : end if : end if : end if : end function
+
+'*configure() :: get_configure, fn_conf \old configure() wrapper\
+function configure() : set configure = get_configure(fn_conf()) : end function
+'+fn_conf() :: iif, eau, aan, basename, e, ef, buildpath \return default configure filename\
+function fn_conf() : dim fn : fn = iif(eau("configure"), aan("configure"), basename(wscript.scriptname)&".configure") : if not e(fn) and ef("conf") then : fn = buildpath("conf", fn) : end if : fn_conf = fn : end function
+'*get_configure(string) :: adic, ea, iecho, e, fcleanup, rmatch, getmatch, rremove, dic, typecast, isvalue, isnothing, FUNCTION_CONFIGURE_SET_EMPTY, eecho 
+function get_configure(fn) : dim d,b,flg,z : set d = adic() : if ea("noconfigure") then : iecho("noconfigure") : else : if e(fn) then : for each b in fcleanup(fn) : if(rmatch(b,"(^\s*<(/)*conf(igure)*>$)")) then : flg = flg + 1 : end if : if((flg=1) and not rmatch(b,"^\s*(\/\/|'|--|\#).*$")) then : set b = getmatch(rremove(b,"^\s*(\/\/|'|--|\#).*$"),"^\s*([a-zA-Z""][a-zA-Z0-9_]*)\s*=\s*(.*)\s*$") : if(b.count > 0) then : z = b(0).submatches(1) : if not (rmatch(z,""".*""")) then : z = trim(rremove(z,"\s*(//|--|').*$|\s*$|\/\*.*\*\/")) : else : z = getmatch(z,"("".*"")")(0).submatches(0) : end if : if rmatch(z,"("".*"")|(#.*#)") then : call dic(d,b(0).submatches(0),iif(ea("notypecast"),z,typecast(z))) : else : call dic(d,b(0).submatches(0),iif(ea("notypecast"),trim(rremove(z,"#.*$")),typecast(trim(rremove(z,"#.*$"))))) : end if : end if : end if : next : for each z in d : if not isvalue(d(z)) then : if isnothing(d(z)) then : if FUNCTION_CONFIGURE_SET_EMPTY then : set d(z) = nothing : else : d.remove z : end if : end if : else : if(len(d(z))=0) then : if FUNCTION_CONFIGURE_SET_EMPTY then : d(z) = empty : else : d.remove z : end if : end if : end if : next : else : eecho("missing configure file("&fn&"), abort") : wscript.quit() : end if : end if : call dic(d,"_skelverion",skelversion()) : call dic(d,"_configure",fn) : call dic(d,"_startdate",datetime1()) : call dic(d,"_logname",flogname()) : call dic(d,"_logtype",FUNCTION_FLOG_TYPENAME) : call dic(d,"_datetimetype",FUNCTION_DATETIME_TYPENAME) : set get_configure = d : end function
+'makeconfig(string) :: e, rreplace, fwrite, iecho \work with configure()\
+function makeconfig(fn) : fn = iif(strcmp(extension(fn),"configure"),fn,fn&".configure") : if not e(fn) then : on error resume next : do : err.clear : call fwrite(fn).writeline("<configure>"&vbnewline&vbnewline&"</configure>") : loop until (err.number=0) : iecho("(makeconfig) => create .configure file:"&fn) : else : iecho("(makeconfig) => already exists ("&fn&")") : end if : wscript.quit : end function
+'+skelversion() :: 
+function skelversion() : on error resume next : skelversion = skelv : if err.number <> 0 then : skelversion = "undefined" : err.clear : end if : end function
+'+getepid() :: rndstr, FUNCTION_FLOG_EPID \\
+function getepid() : if isempty(FUNCTION_FLOG_EPID) then : FUNCTION_FLOG_EPID = rndstr(5): end if : getepid = FUNCTION_FLOG_EPID : end function
+'+configure_xml() :: adic, iif, eau, aan, basename, e, ef, buildpath, xml, iecho, eecho, FUNCTION_CONFIGURE_SET_EMPTY, rmatch, dic, cast, push, skelversion, datetime1, flogname, FUNCTION_FLOG_TYPENAME, FUNCTION_DATETIME_TYPENAME
+function configure_xml() : dim d, fn,oxml,param,i,a,name, elem, num : num = 0 : set d = adic() : fn = iif(eau("configure"),aan("configure"),basename(wscript.scriptname)&".configure.xml") : if not e(fn) and ef("conf") then : fn = iif(e(buildpath("conf",basename(wscript.scriptname)&".configure.xml")),buildpath("conf",basename(wscript.scriptname)&".configure.xml"),fn) : end if : set oxml = xml(fn) : iecho("(configure_xml) => detect "&oxml.documentElement.getElementsByTagName("param").length&" parameters.") : for each param in oxml.documentElement.selectNodes("/configure/param") : set name = param.getElementsByTagName("name") : set elem = param.getElementsByTagName("element") : if name.length<1 then : iecho("(configure_xml) => invalid 'param' ("&num&": undefined 'name'), skipped.") : else : if elem.length<1 then : iecho("(configure_xml) => invalid 'param' ("&num&": undefined 'element'), skipped.") : else : if not elem(0).haschildnodes then : if isnull(elem(0).getattribute("type")) then : if FUNCTION_CONFIGURE_SET_EMPTY then : call dic(d, name(0).text, empty) : else : iecho("(configure_xml) => detect empty 'element' ("&num&": has no 'value'), skipped.") : end if : else : if FUNCTION_CONFIGURE_SET_EMPTY then : if rmatch(elem(0).getattribute("type"),"(dic|dictionary)") then : call dic(d, name(0).text, adic()) : end if : if rmatch(elem(0).getattribute("type"),"(arr|array)") then : call dic(d, name(0).text, array()) : end if : else : iecho("(configure_xml) => detect empty 'element' ("&num&": has no 'value'), skipped.") : end if : end if : else : if isnull(elem(0).getattribute("type")) then : if elem(0).childnodes.length>1 then : iecho("(configure_xml) => invalid 'value' ("&num&": has multiple 'value', only allowed in 'type': array/dictionary), skipped.") : else : call dic(d, name(0).text, cast(elem(0).childnodes(0).text, elem(0).childnodes(0).getattribute("type"))) : end if : else : if rmatch(elem(0).getattribute("type"),"(arr|array)") then : a = array() : for i=0 to elem(0).childnodes.length-1 : if rmatch(elem(0).childnodes(i).getattribute("type"),"(arr|array|dic|dictionary)") then : iecho("(configure_xml) => invalid 'value,type' ("&num&","&i&": not allowed '"&elem(0).childnodes(i).getattribute("type")&"' yet), skipped.") : else : call push(a, cast(elem(0).childnodes(i).text, elem(0).childnodes(i).getattribute("type"))) : end if : next : call dic(d, name(0).text, a) : end if : if rmatch(elem(0).getattribute("type"),"(dic|dictionary)") then : set a = adic() : for i=0 to elem(0).childnodes.length-1 : if rmatch(elem(0).childnodes(i).getattribute("type"),"(arr|array|dic|dictionary)") then : iecho("(configure_xml) => invalid 'value,type' ("&num&","&i&": not allowed '"&elem(0).childnodes(i).getattribute("type")&"' yet), skipped.") : else : if isnull(elem(0).childnodes(i).getattribute("key")) then : iecho("(configure_xml) => invalid value ("&num&","&i&": not allowed null 'key'), skipped.") : else : call dic(a, elem(0).childnodes(i).getattribute("key"), cast(elem(0).childnodes(i).text, elem(0).childnodes(i).getattribute("type"))) : end if : end if : next : call dic(d, name(0).text, a) : end if : if not rmatch(elem(0).getattribute("type"),"(dic|dictionary|arr|array)") then : iecho("(configure_xml) => not support '"&elem(0).getattribute("type")&"' has multiple 'value', skipped.") : end if : end if : end if : end if : end if : num = num+1 : next : call dic(d,"_skelverion",skelversion()) : call dic(d,"_configure",fn) : call dic(d,"_startdate",datetime1()) : call dic(d,"_logname",flogname()) : call dic(d,"_logtype",FUNCTION_FLOG_TYPENAME) : call dic(d,"_datetimetype",FUNCTION_DATETIME_TYPENAME) : set configure_xml = d : end function : 
+
+'--- #miscfunctions
+'----------------------------------------------------------
+'e.g. send_mail("from@mail.addr", "to@mail.addr", "cc@mail.addr", "subject", "mail body", attachment-filename_obejct, "smtpserver", 25, 1000)
+'e.g. send_mail("from@mail.addr", "to@mail.addr", "cc@mail.addr", "subject", "mail body", attachment-filename_string, "smtpserver", 25, 1000)
+'e.g. send_mail("from@mail.addr", "to@mail.addr", "cc@mail.addr", "subject", "mail body", null, "smtpserver", 25, 1000)
+'*send_mail(string, string, string, string, string, file_object, string, integer, integer) :: eecho, isfile, isstring, e, afso, wecho, iecho, FUNCTION_SEND_MAIL_CONFIGURE_STRINGS, FUNCTION_SEND_MAIL_ALWAYS_SEND \attachment accepts string, file_object, null\
+function send_mail(from, toa, cc, subject, textbody, attachment, smtpserver, nport, timeout) : if not (isstring(from) and isstring(toa) and isstring(smtpserver) and isinteger(nport) and isinteger(timeout)) then : eechon("(send_mail) => wants (string, string, string, string, string, file_object, string, integer, integer), gave ("&typename(from)&", "&typename(toa)&", "&typename(cc)&", "&typename(subject)&", "&typename(textbody)&", "&typename(attachment)&", "&typename(smtpserver)&", "&typename(nport)&", "&typename(timeout)&")") : exit function : end if : dim mail : set mail = createobject("cdo.message") : mail.from = from : mail.to = toa : mail.cc = cc : mail.subject = subject : mail.textbody = textbody : if isfile(attachment) then : mail.addattachment(attachment) : else : if not isnull(attachment) then : if isstring(attachment) then : if e(attachment) then : mail.addattachment(afso.getfile(attachment)) : else : if not len(attachment)=0 then : wecho("(send_mail) => attachment-file is missing.") : end if : end if : else : iecho("(send_mail) => invalid attachment type, gave ("&typename(attachment)&")") : end if : end if : end if : mail.configuration.fields.item(FUNCTION_SEND_MAIL_CONFIGURE_STRINGS&"/sendusing") = 2 : mail.configuration.fields.item(FUNCTION_SEND_MAIL_CONFIGURE_STRINGS&"/smtpserver") = smtpserver : mail.configuration.fields.item(FUNCTION_SEND_MAIL_CONFIGURE_STRINGS&"/smtpserverport") = nport : mail.configuration.fields.item(FUNCTION_SEND_MAIL_CONFIGURE_STRINGS&"/smtpconnectiontimeout") = timeout : mail.configuration.fields.update() : if FUNCTION_SEND_MAIL_ALWAYS_SEND then : send_mail = mail.send() : set send_mail = nothing : else : set send_mail = mail : end if : end function
+'e.g. config_dictionay = { "from" => "from@mail.addr", "to" => array("to1@mail.addr", "to2@mail.addr"),  }
+'e.g. from, array(to), array(cc), array(bcc), subject, htmlbody, textbody, bodypart.charset, array(attachment)
+'*mkmail(dictionary) :: eechon, iif, ed, isarray, anet, e, afso
+function mkmail(ca) : dim a : set mkmail = createobject("cdo.message") : if err.number then : eechon("(mkmail) => cannot create cdo.message object") : exit function : end if : mkmail.from = iif(ed(ca,"from"),ca("from"),"") : if ed(ca,"to") then : if isarray(ca("to")) then : mkmail.to = join(ca("to"),",") : else : mkmail.to = ca("to") : end if : end if : if ed(ca,"cc") then : if isarray(ca("cc")) then : mkmail.to = join(ca("cc"),",") : else : mkmail.to = ca("cc") : end if : end if : if ed(ca,"bcc") then : if isarray(ca("bcc")) then : mkmail.to = join(ca("bcc"),",") : else : mkmail.to = ca("bcc") : end if : end if : mkmail.subject = iif(ed(ca,"subject"),ca("subject"),"send from "&anet.computername&" <"&wscript.scriptfullname&">") : if ed(ca,"htmlbody") then : mkmail.htmlbody = ca("htmlbody") : end if : if ed(ca,"textbody") then : mkmail.textbody = ca("textbody") : end if : if ed(ca,"bodypart.charset") then : mkmail.textbody = ca("bodypart.charset") : end if : if ed(ca,"attachment") then : if not isarray(ca("attachment")) then : ca("attachment") = array(ca("attachment")) : end if : for each a in ca("attachment") : if e(afso.getabsolutepathname(a)) then : mkmail.addattachment(afso.getabsolutepathname(a)) : else : eechon("(mkmail) => missing file("&a&")") : set mkmail = nothing : exit function : end if : next : end if : if err.number <> 0 then : eechon("(mkmail) => config error") : end if : end function
+'?ismail(imessage_object) :: strcmp
+function ismail(m) : ismail = strcmp(typename(m), typename(createobject("cdo.message"))) : end function
+'*mailer(imessage_object, string, string) :: pmailer
+function mailer(mail, svr, prt) : if ismail(mail) then : set mailer = pmailer(mail, 2, svr, prt, 1000, false, 1, "", "") : else : eechon("(mailer) => mail object required") :end if : end function
+'primitive mailer
+'*pmailer(imessage_object, string, string, string, string, string, string, string, string) :: FUNCTION_PMAILER_SCHEMA_STRING, eechon
+function pmailer(mail, su, svr, prt, tmout, ssl, auth, name, pswd) : dim schema : schema = FUNCTION_PMAILER_SCHEMA_STRING : mail.configuration.fields.item(schema&"/sendusing") = su : mail.configuration.fields.item(schema&"/smtpserver") = svr : mail.configuration.fields.item(schema&"/smtpserverport") = prt : mail.configuration.fields.item(schema&"/smtpconnectiontimeout") = tmout : mail.configuration.fields.item(schema&"/smtpusessl") = ssl : mail.configuration.fields.item(schema&"/smtpauthenticate") = auth : mail.configuration.fields.item(schema&"/sendusername") = name : mail.configuration.fields.item(schema&"/sendpassword") = pswd : mail.configuration.fields.update() : if err.number <> 0 then : eechon("(pmailer) => config error") : end if : set pmailer = mail : end function
+
+
+'+newcmd() :: ashell, rndstr, flog, FUNCTION_NEWCMD_TITLE_STRING \newcmd() returns window-title for handling with actsendkeys()\
+function newcmd() : dim t : t = FUNCTION_NEWCMD_TITLE_STRING&rndstr(5) : ashell.run "cmd /C start """&t&"""", 2, false : flog("(newcmd) => create window:"&t) : newcmd = t : end function
+'+actsendkeys(string, string) :: actsend \(windowtitle, command)\
+function actsendkeys(t,s) : actsendkeys = actsend(t,s,1) : end function 
+'+actsend(string, string, integer) :: flog, ashell, FUNCTION_ACTSEND_WAIT_TIME, FUNCTION_ACTSEND_DELAY_COUNT \implement function for actsendkeys()\
+function actsend(t,s,n) : wscript.sleep 5 : if(n>FUNCTION_ACTSEND_DELAY_COUNT) then : wscript.sleep FUNCTION_ACTSEND_WAIT_TIME : call actsendkeys(t,s) : else : if(ashell.appactivate(t)) then : ashell.sendkeys(s) : else : call actsend(t,s,n+1) : end if : end if : actsend = flog("(actsend) => "&t&": "&s) : end function
+'*twitter(user,pswd) :: axmlhttp, 
+function twitter(u,p) : dim tw : set tw = axmlhttp : tw.open "POST", "http://twitter.com/statuses/update.json", false, u, p : tw.setrequestheader "Content-Type", "application/x-www-form-urlencoded" : tw.setrequestheader "X-Twitter-Client", "tw.vbs" : tw.setrequestheader "X-Twitter-Client-Version", "1.0" : set twitter = tw : end function
+'tweet(user, pswd, comment) :: twitter
+function tweet(u,p,c) : twitter(u,p).send("status="&c) : end function
+'selectfolder() :: aapp, ef, eechon, 
+function selectfolder() : dim d : set d = aapp().browseforfolder(0,"Select a folder", 0) : on error resume next : if err.number=0 then : if not ef(d.items.item.path) then : eechon ("(selectfolder) => not exist folder("&d.items.item.path&"), flushed.") : selectfolder = "" : else : selectfolder = d.items.item.path : end if : else : eechon("(selectfolder) => error occured.") : selectfolder = "" : end if : end function
+'+tee(string, string) :: isstring, fwrite, echon, iecho
+function tee(f,s) : if isstring(f) and isstring(s) then : if len(f)>0 then : fwrite(f).writeline(s) : tee = echon(s) : else : iecho("(tee) => invalid filename. ") : end if : else : iecho("(tee) => wants (string, string), gave ("&typename(f)&","&typename(s)&")") : end if : end function : 
+
+'-- #datetime
+'----------------------------------------------------------
+'+datetime() :: FUNCTION_DATETIME_TYPENAME \speed rank = datetime2 >> datetime1 > datetime0\
+function datetime() :: datetime = getref(FUNCTION_DATETIME_TYPENAME) : end function
+'+datetime0() :: datetime
+function datetime0() : datetime0 = right(replace(date,"/","") & right(replace("0"&time,":",""),6),12) : end function
+'+datetime1() :: datetime
+function datetime1() : datetime1 = now()&"."&left((timer*100 mod 100)&"0",2) : end function
+'+datetime2() :: datetime
+function datetime2() : datetime2 = now() : end function
+'+datetime3() :: datetime
+function datetime3() : datetime3 = yndHMSnow("yyyynnddHHMMSS") : end function
+'ts2date(numeric) :: FUNCTION_UNIXTIME_BASIS
+function ts2date(s) : if isnumeric(s) then : ts2date = dateadd("s", s, FUNCTION_UNIXTIME_BASIS) : end if : end function
+'udate(date) :: FUNCTION_UNIXTIME_BASIS
+function udate(s) : if isdate(s) then : udate = clng(datediff("s",FUNCTION_UNIXTIME_BASIS,s)) : end if : end function
+'udatenow() :: FUNCTION_UNIXTIME_BASIS
+function udatenow() : udatenow = clng(datediff("s",FUNCTION_UNIXTIME_BASIS,now())) : end function
+'+unixtime() :: FUNCTION_UNIXTIME_BASIS, FUNCTION_UNIXTIME_OFFSET \make consideration for Local Time\
+function unixtime() : unixtime = datediff("s",FUNCTION_UNIXTIME_BASIS,dateadd("h",FUNCTION_UNIXTIME_OFFSET,now())) : end function
+'+unix2date(numeric) :: iecho, FUNCTION_UNIXTIME_BASIS, FUNCTION_UNIXTIME_OFFSET \make consideration for Local Time\
+function unix2date(s) : if isnumeric(s) then : unix2date = dateadd("h",-1*FUNCTION_UNIXTIME_OFFSET,dateadd("s",s,FUNCTION_UNIXTIME_BASIS)) : else : iecho("(unix2date) => wants (numeric)") : end if : end function
+'e.g. date_separate("10 days after") = macthes_object()
+'*date_separate(string) :: rmatch, getmatch, adic, eecho
+function date_separate(s) : if isstring(s) then : if rmatch(s,"^(-\d\d*|\d*)\s*([ymdHMS]|years*|months*|days*|hours*|min|minutes*|sec|seconds*)(\s*(after|before))*$") then : set date_separate = getmatch(s,"^(-\d\d*|\d*)\s*([ymdHMS]|years*|months*|days*|hours*|mins*|minutes*|secs*|seconds*)(\s*(after|before))*$") : else : eechon("(date_separate) => invalid argument("&s&")") : set date_separate = adic() : end if : else : iecho("(date_separate) => wants (string)") : end if : end function
+'e.g. date_element("10 days after") = dictionary_object()
+'e.g. date_element(date_separate("10 days after")) = dictionary_object()
+'*date_element(string) :: ismatch, date_unit, strcmp, dictionary, date_separate
+function date_element(s) : if ismatch(s) then : if s(0).submatches.count=4 then : dim b : b = "{unit => "&date_unit(s(0).submatches(1))&", number => "&s(0).submatches(0)&", flag => " : if isempty(s(0).submatches(2)) then : b = b&"-1" : else : if strcmp(s(0).submatches(3),"after") then : b = b&"1" : else : b = b&"-1" : end if : end if : end if : b = b&"}" : set date_element = dictionary(b) : else : set date_element = date_element(date_separate(s)) : end if : end function
+'+date_unit(string) :: dictionary
+function date_unit(s) : dim u : set u = dictionary("{y => yyyy, m => m, d => d, H => h, M => n, S => s, year => yyyy, years => yyyy, month => m, months => m, day => d, days => d, hour => h, hours => h, min => n, minute => n, mins => n, minutes => n, sec => s, second => s, secs => s, seconds => s}") : date_unit = u(s) : end function
+'e.g. date_subnow(date_separate("10 days after")) = date()
+'e.g. date_subnow("10 days before") = date()
+'+date_subnow(string) :: isdictionary, ed, iecho, isstring, date_element
+function date_subnow(s) : date_subnow = date_sub(s,now()) : end function
+'e.g. date_sub(date_separate("10 days after"),now()) = date()
+'e.g. date_sub("10 days before","2010/08/08 08:08:08") = date()
+'+date_sub(string, date) :: isdictionary, ed, iecho, isstring, date_element
+function date_sub(s,p) : if isdictionary(s) and isdate(p) then : if ed(s,"unit") and ed(s,"number") and ed(s,"flag") then : date_sub = dateadd(s("unit"), s("flag") * s("number"), p) : else : iecho("(date_sub) => wants (dictionary, date)") : end if : else : if isstring(s) and isdate(p) then : date_sub = date_sub(date_element(s), p) : else : iecho("(date_sub) => wants (string, date)") : end if : end if : end function
+'e.g. date_expand("10 days before", now()) = array(1days before, 2 days before, ..., 10 days before)
+'+date_expand(string, date) :: isdictionary, ed, 
+function date_expand(s,p) : dim i,r: r = array() : if isdictionary(s) and isdate(p) then : if ed(s,"unit") and ed(s,"number") and ed(s,"flag") then : for i=1*s("flag") to s("number")*s("flag") step 1*s("flag") : call push(r,dateadd(s("unit"),i,p)) : next : date_expand = r : else : iecho("(date_expand) => wants (dictionary/string, date)") : end if : else : date_expand = date_expand(date_element(s),p) : end if : end function
+'+date_expandnow(string) :: date_expand
+function date_expandnow(s) : date_expandnow = date_expand(s,now()) : end function : 
+'+yyyy(date) :: 
+function yyyy(d) : if isdate(d) then : yyyy = year(d) : end if : end function
+'+yy(date) :: 
+function yy(d) : if isdate(d) then : yy = right(year(d),2) : end if : end function
+'+nn(date) ::
+function nn(d) : if isdate(d) then : nn = right("0"&month(d),2) : end if : end function
+'+dd(date) ::
+function dd(d) : if isdate(d) then : dd = right("0"&day(d),2) : end if : end function
+'+HH(date) ::
+function HH(d) : if isdate(d) then : HH = right("0"&hour(d),2) : end if : end function
+'+MM(date) ::
+function MM(d) : if isdate(d) then : MM = right("0"&minute(d),2) : end if : end function
+'+SS(date) ::
+function SS(d) : if isdate(d) then : SS = right("0"&second(d),2) : end if : end function
+'+tyyyy(string, date) :: yyyy
+function tyyyy(s,d) : if(instr(s,"yyyy")>0) then : tyyyy = replace(s,"yyyy",yyyy(d)) : else : tyyyy = s : end if : end function
+'+tyy(string, date) :: yy
+function tyy(s,d) : if(instr(s,"yy")>0) then : tyy = replace(s,"yy",yy(d)) : else : tyy = s : end if : end function
+'+tnn(string, date) :: nn
+function tnn(s,d) : if(instr(s,"nn")>0) then : tnn = replace(s,"nn",nn(d)) : else : tnn = s : end if : end function
+'+tdd(string, date) :: dd
+function tdd(s,d) : if(instr(s,"dd")>0) then : tdd = replace(s,"dd",dd(d)) : else : tdd = s : end if : end function
+'+tHH(string, date) :: HH
+function tHH(s,d) : if(instr(s,"HH")>0) then : tHH = replace(s,"HH",HH(d)) : else : tHH = s : end if : end function
+'+tMM(string, date) :: MM
+function tMM(s,d) : if(instr(s,"MM")>0) then : tMM = replace(s,"MM",MM(d)) : else : tMM = s : end if : end function
+'+tSS(string, date) :: SS
+function tSS(s,d) : if(instr(s,"SS")>0) then : tSS = replace(s,"SS",SS(d)) : else : tSS = s : end if : end function
+'+yndnow(string) :: ynd
+function yndnow(s) : yndnow = ynd(s,now()) : end function
+'+ynd(string,date) :: tdd, tnn, tyyyy
+function ynd(s,d) : ynd = tdd(tnn(tyyyy(s,d),d),d) : end function
+'+yndHMSnow(string) :: yndHMS
+function yndHMSnow(s) : yndHMSnow = yndHMS(s,now()) : end function 
+'+yndHMS(string, date) :: tSS,tMM,tHH,tdd,tnn,tyyyy
+function yndHMS(s,d) : yndHMS = tSS(tMM(tHH(tdd(tnn(tyyyy(s,d),d),d),d),d),d) : end function
+'+pattern_replace(string, dictionary) :: isdictionary, isstring, dictionary, dicmerge, rreplace, iecho \default pattern include yyyy(),yy(),nn(),dd(),HH(),MM(),SS()\
+function pattern_replace(s,d) : if (isdictionary(d) and isstring(s)) then : dim n : n = now() : dim p,c : set c = dictionary("{yyyy => """&yyyy(n)&""", yy => """&yy(n)&""", nn => """&nn(n)&""",dd => """&dd(n)&""",HH => """&HH(n)&""",MM => """&MM(n)&""",SS => """&SS(n)&"""}") : if (d.count>0) then : set c = dicmerge(c,d) : else : iecho("(pattern_replace) => additional dictionary has no keys. use ynd() or yndHMS().") : end if : pattern_replace = s : for each p in c : pattern_replace = rreplace(pattern_replace,p,c(p)) : next : else : iecho("(pattern_replace) => wants (string, dictionary), gave ("&typename(s)&", "&typename(d)&")") : end if : end function
+
+'-- #dictionary
+'----------------------------------------------------------
+'dic(dictionary_object,value,value) :: isdictionary, isstring, ed \(dictionary_object , keyname, value) value of dic() allowed a object or not.\
+function dic(d,n,byval v) : if isdictionary(d) and isvalue(n) then : if(ed(d,n)) then : if(isobject(v)) then : set d(n) = v : else d(n) = v : end if : else : d.add n, v : end if : else : iecho("(dic) => wants (dictionary, value, value)") : end if : end function
+'e.g. dicmerge(dictionary, dictionary)
+'e.g. dicmerge(dictionary, array(dictionary, false)) for impliment dicmerge
+'*dicmerge(dictionary, dictionary) :: eecho, isdictionary, ed, dic, iecho \dicmerge() effect original variable and always override value that same key with merged dictionary\
+function dicmerge(d,r) : if isarray(r) then : if (ubound(r)=2) then : eechon("(dicmerge) => invalid argument.") : exit function : end if : dim a,b,o : o = r(1) : set a = r(0) : if isdictionary(d) and isdictionary(a) then : for each b in a : if (not ed(d,b) or o) then : if isdictionary(d(b)) and isdictionary(a(b)) then : call dicmerge(d(b),a(b)) : else : call dic(d,b,a(b)) : end if : set dicmerge = d : else : iecho("(dicmerge) => not overwrited(key:"&b&", value:"&a(b)&")") : end if : next : else : eechon("(dicmerge) => wants (dictionary, dictionary)") : end if : else : set dicmerge = dicmerge(d,array(r,true)) : end if : end function
+'*dicunite(dictionary_object, dictionary_object) :: isdictionary, dicmerge, iecho \\
+function dicunite(d,r) : if isdictionary(d) and isdictionary(r) then : set dicunite = dicmerge(d,array(r,false)) : else : iecho("(dicunite) => wants (dictionary, dictionary)") : end if : end function
+'e.g. dictionary("{a => test, b => false, c => 1}")
+'e.g. dictionary(array("a => test","b = false","c => 1")) 
+'*dictionary(array) :: adic, rmatch, rremove, getmatch, dic, typecast, FUNCTION_DICTIONARY_FORMAT, rreplace 
+function dictionary(a) : dim v : set dictionary = adic() : if isarray(a) then : for each v in a : if rmatch(v,FUNCTION_DICTIONARY_FORMAT) then : set v = getmatch(v,FUNCTION_DICTIONARY_FORMAT) : call dic(dictionary,trim(v(0).submatches(0)),typecast(rreplace(v(0).submatches(1),"chr\(44\)",","))) : end if : next : else : if rmatch(a,"^{.*}$") then : set dictionary = dictionary(split(rremove(a,"^{|}$"),",")) : end if : end if : end function
+
+'-- #array
+'----------------------------------------------------------
+'+pop(array) :: bind \(1,2,3) -> (1,2), 3\
+function pop(a) : if isarray(a) then : if (ubound(a)>-1) then : call bind(pop,a(ubound(a))) : redim preserve a(ubound(a)-1) : else : pop = empty : a = array() : end if : end if : end function
+'+shift(array) :: bind,pop,push \(1,2,3) -> 1, (2,3)\
+function shift(a) : if isarray(a) then : if (ubound(a)>-1) then : dim i,b,c : c = array() : redim b(ubound(a)-1) : call bind(shift,a(0)) : for i=0 to ubound(a)-1 : call bind(b(i),a(i+1)) : next : a = array() : do until (ubound(b)=-1) : call push(c,pop(b)) : loop : do until (ubound(c)=-1) : call push(a,pop(c)) : loop : else : shift = empty : a = array() : end if : end if : end function
+'+push(array, value) :: bind \(1,2,3),4 -> (1,2,3,4)\
+function push(a,v) : if isarray(a) then : redim preserve a(ubound(a)+1) : call bind(a(ubound(a)),v) : push = a : end if : end function
+'+unshift(array, value) :: bind \(1,2,3),4 -> (4,1,2,3)\
+function unshift(a,v) : dim i : if isarray(a) then : redim preserve a(ubound(a)+1) : for i=ubound(a) to 1 step -1 : call bind(a(i),a(i-1)) : next : call bind(a(0),v) : unshift = a : end if : end function
+'swap(variable,variable) :: bind 
+function swap(a,b) : dim t : call bind(t,b) : call bind(b,a) : call bind(a,t) : end function
+'+qsort(array) :: swap, isinarray, iecho
+function qsort(a) : if not isinarray(a,"[Oo]bject|[Nn]othing|[Vv]ariant") then : dim i,j,n : n = ubound(a) : j = 0 : do until (j = n) : for i=0 to ubound(a)-1 : if(a(i) > a(i+1)) then : call swap(a(i),a(i+1)) : end if : next : j = j + 1 : loop : qsort = a : else : iecho("(qsort) => wants (array) that not included (object/nothing/array)") : end if : end function
+'+rsort(array) :: swap, isinarray, iecho
+function rsort(a) : if not isinarray(a,"[Oo]bject|[Nn]othing|[Vv]ariant") then : dim i,j,n : n = ubound(a) : j = 0 : do until (j = n) : for i=0 to ubound(a)-1 : if(a(i) < a(i+1)) then : call swap(a(i),a(i+1)) : end if : next : j = j + 1 : loop : rsort = a : else : iecho("(rsort) => wants (array) that not included (object/nothing/array)") : end if : end function
+'+arrmerge(array, array) :: bind, iecho 
+function arrmerge(a,b) : if isarray(a) and isarray(b) then : dim i,c : c = a : redim preserve c(ubound(a)+ubound(b)+1) : for i=ubound(a)+1 to ubound(c) : call bind(c(i),b(i-ubound(a)-1)) : next : arrmerge = c : else : iecho("(arrmerge) => wants (array,array)") : end if : end function
+'yarra(array) :: bind, 
+function yarra(a) : if isarray(a) then : dim i,b() : redim b(ubound(a)) : for i=0 to ubound(a) : call bind(b(ubound(a)-i),a(i)) : next : yarra = b : end if : end function
+'+popn(array, integer) :: iif, bind, pop, push
+function popn(a,n) : dim i,v,b : v = array() : i = iif(n>-1,n,0) : do until (i=0) : call bind(b,pop(a)) : call push(v,b) : i = i - 1 : loop : popn = v : end function
+'shiftn(array, integer) :: iif, bind, shift, push
+function shiftn(a,n) : dim i,v,b : v = array() : i = iif(n>-1,n,0) : do until (i=0) : call bind(b,shift(a)) : call push(v,b) : i = i - 1 : loop : shiftn = v : end function
+'pull(array, integer) :: popn, push, pop
+function pull(a,n) : dim b : if isarray(a) then : if (ubound(a)>=n) then : b = popn(a,ubound(a)-n) : pull = a(ubound(a)) : redim preserve a(ubound(a)-1) : do until ubound(b)=-1 : call push(a,pop(b)) : loop : end if : end if : end function
+'+array_chop(array) :: \(1,2) => (1)\
+function array_chop(a) : redim preserve a(ubound(a)-1) : array_chop = a : end function
+'+array_chop(array) :: \(1,2,"") => (1,2)\
+function array_chomp(a) : if a(ubound(a)) = "" then : redim preserve a(ubound(a)-1) : end if : array_chomp = a : end function
+
+'=-- #environment
+'----------------------------------------------------------
+'+getcd() :: afso
+function getcd() : getcd = afso.getfolder(".") : end function
+'+getenv(env_string) :: ashell
+function getenv(s) : getenv = ashell.expandenvironmentstrings(s) : end function
+'+pwd() :: absolutepath 
+function pwd() : pwd = absolutepath(".") : end function
+'+env() :: ashell
+function env(s) :: env = ashell.expandenvironmentstrings(s) : end function
+
+'-- #processes
+'----------------------------------------------------------
+'getpid() :: isusewmi, getpid_wmi, getpid_tasklist
+function getpid() : if isusewmi() then : getpid = getpid_wmi() : else : getpid = getpid_tasklist() : end if : end function
+'getpid_wmi() :: rndstr, aconn \getpid use wmi\
+function getpid_wmi() : dim a,r,t,b : a = rndstr(5) : ashell.run "cmd.exe /K title="&a,2,false : set t = aconn.execquery("select * from win32_process where commandline like '%"&a&"'") : for each r in t : b = r.parentprocessid : r.terminate : next : set t = aconn.execquery("select * from win32_process where processid = "&b) : for each r in t : getpid_wmi = r.parentprocessid : next : end function
+'+getpid_tasklist() :: rndstr, exec, getsubmatch \getpid use tasklist\
+function getpid_tasklist() : dim a,r : a = rndstr(5) : set r = exec("cmd.exe /K title="&a) : getpid_tasklist = clng(getsubmatch(replace(exec("tasklist /FI ""IMAGENAME eq cmd.exe"" /FI ""WINDOWTITLE eq "&a&"""").stdout.readall,vbnewline,""),"cmd.exe\s*(\d*)")(0)) : r.terminate : end function
+'+texec(string) :: echon, ashell, echon, waitr
+function texec(p) : if isstring(p) then : set texec = ashell.exec(p) : flog("(texec) => pid:"&texec.processid&" status:"&texec.status&" cmd:"&p&" time:"&waitr(texec)&" sec") : else : iecho("(texec) => wants (string)") : end if : end function
+'+waitr(wshexec_object) :: iswshexec, echon, eecho, 
+function waitr(p) : if iswshexec(p) then : dim s : s = timer : do while (true) : flog("(waitr) => "&p.stdout.readline) : if (p.status <> 0 and p.stdout.atendofstream = true) then : exit do : end if : if (p.status = 2) then : eechon(p.stderr.readall) : exit do : end if : loop : waitr = timer - s : else : iecho("(waitr) => wants (wsh_object)") : end if : end function
+'+exec(cmdstr) :: ashell, echon, FUNCTION_EXEC_RETURNS_STRINGS
+function exec(cmd) : if isstring(cmd) then : set exec = ashell.exec(cmd) : flog("(exec) => pid:"&exec.processid&" status:"&exec.status&" cmd:"&cmd) : if(FUNCTION_EXEC_RETURNS_STRINGS) then : exec = "(exec) => done" : end if : else : iecho("(exec) => wants (string)") : end if : end function
+
+'-- #echo
+'----------------------------------------------------------
+'+echo(string) :: iscscript, isprintable, flog,FUNCTION_FLOG_TYPENAME,iecho \cbool(right(FUNCTION_FLOG_TYPENAME,1)) means "...TYPENAME != 0 then" \
+function echo(s) : if iscscript() and isprintable(s) then : if(cbool(right(FUNCTION_FLOG_TYPENAME,1))) then : wscript.stdout.write(s) : end if : echo = flog(s) : else : echo = iecho("(echo) => wants (string), gave ("&typename(s)&")") : end if : end function
+'+echon(string) :: iscscript, isprintable, flog,FUNCTION_FLOG_TYPENAME,iecho
+function echon(s) : if iscscript() and isprintable(s) then : if(cbool(right(FUNCTION_FLOG_TYPENAME,1))) then : wscript.stdout.writeline(s) : end if : echon = flog(s) : else : echon = iecho("(iecho) => wants (string), gave ("&typename(s)&")") : end if : end function
+'+pecho(string) :: isstring, ashell, flog, FUNCTION_PECHO_TIMEOUT_TIME
+function pecho(s) : if isstring(s) or isempty(s) then : pecho = flog("(pecho) => "&ashell.popup(s,FUNCTION_PECHO_TIMEOUT_TIME)&" "&s) : end if : end function
+'+eecho(string) :: iscscript, isprintable, flog,FUNCTION_FLOG_TYPENAME, iecho
+function eecho(s) : if iscscript() and isprintable(s) then : if(cbool(right(FUNCTION_FLOG_TYPENAME,1))) then : wscript.stderr.write("[ERR ] - "&s) : end if : eecho = flog("[ERR ] - "&s) : else : eecho = iecho("(eecho) => wants (string), gave ("&typename(s)&")") : end if : end function
+'+eechon(string) :: iscscript, isprintable, flog,FUNCTION_FLOG_TYPENAME, iecho
+function eechon(s) : if iscscript() and isprintable(s) then : if(cbool(right(FUNCTION_FLOG_TYPENAME,1))) then : wscript.stderr.writeline("[ERR ] - "&s) : end if : eechon = flog("[ERR ] - "&s) : else : eechon = iecho("(eechon) => wants (string), gave ("&typename(s)&")") : end if : end function
+'+iecho(string) :: echon
+function iecho(s) : iecho = echon("[INFO] - "&s) : end function
+'wecho(string) :: echon
+function wecho(s) : wecho = echon("[WARN] - "&s) : end function
+'aecho(array) :: echon, iif, isprintable, iecho
+function aecho(a) : if(isarray(a)) then : dim i : for i=lbound(a) to ubound(a) : if(isarray(a(i))) then : echon("("&i&")(") : aecho(a(i)) : echon(")") : else : echon("("&i&") = "&typename(a(i))&"("&iif(isprintable(a(i)), a(i), "*")&")") : end if : next : else : iecho("(aecho) => wants (array)") : end if : end function
+'xecho(xml_object) :: isxml, isxmlchild, 
+function xecho(o) : dim i : if isxml(o) then : xecho(o.childnodes) : end if : if isxmlchild(o) then : for each i in o : echo i.nodename&" -> "&i.nodevalue : if i.haschildnodes then : xecho(i.childnodes) : end if : next : end if : end function
+'decho(dictionary) :: isdictionary, echon, iecho, iif, isprintable
+function decho(d) : if(isdictionary(d)) then : dim p : for each p in d : if(isdictionary(d(p))) then : echon("("""&p&""")(") : decho(d(p)) : echon(")") : else : echon("("""&p&""") = "&typename(d(p))&"("&iif(isprintable(d(p)),d(p),"*")&")") : end if : next : else : iecho("(decho) => wants (dictionary)") : end if : end function 
+'recho(match_collection) :: ismatch, echon, iecho
+function recho(o) : if(ismatch(o)) then : dim i,j : i = 0 : if o.count > 0 then : do until i >= o.count : j = 0 : echon("("&i&") = "&o(i)) : if(o(i).submatches.count>0) then : do until (j >= o(i).submatches.count) : echon("("&i&").("&j&") = "&o(i).submatches(j)) : j = j + 1 : loop : end if : i = i + 1 : loop : else : iecho("(recho) => object have no matches") : end if : else : iecho("(recho) => wants (matches_object)") : end if : end function
+'dumper(variable) :: var_dump \embedded function for dumper()\
+function dumper(o) : call var_dump(o,0,"") : end function
+'var_dump(variable, integer, string) :: replicate, isstring, isboolean, echon, isdictionary, ismatch, isxml, isxmlchild
+function var_dump(v,n,s) : on error resume next : dim t,a,r,k,i,j,z,f : f = false : t = "(dumper) " : a = replicate(vbtab,n) : r = "=> " : if isxml(v) then : echon(t&a&r&s&typename(v)) : call var_dump(v.childnodes,n+1,"") : f = true : end if : if isxmlchild(v) then : for each z in v : echon(t&a&r&s&z.nodename&" -> "&z.nodevalue) : if z.haschildnodes then : call var_dump(z.childnodes, n+1, "") : end if : next : f = true : end if : if isstring(v) or isnumeric(v) or isempty(v) or isboolean(v) or isdate(v) then : echon(t&a&r&s&typename(v)&"("&v&")") : f = true : end if : if isnull(v) or isnothing(v) then : echon(t&a&r&s&typename(v)&"("&ucase(typename(v))&")") : f = true : end if : if isdictionary(v) then : echon(t&a&r&s&typename(v)&"("&v.count&") {") : for each k in v : call var_dump(v(k),n+1,"("""&k&""") -> ") : next : echon(t&a&r&"}") : f = true : end if : if isarray(v) then : echon(t&a&r&s&"Array("&ubound(v)&") (") : for k=lbound(v) to ubound(v) : call var_dump(v(k), n+1, "["&k&"] -> ") : next : echon(t&a&r&")") : f = true : end if : if ismatch(v) then : echon(t&a&r&s&"Match("&v.count&") (") : for i=0 to v.count-1 : echon(t&replicate(vbtab,n+1)&r&"Matches("&i&") -> v:"""&v(i).value&""" i:"&v(i).firstindex&" l:"&v(i).length) : if (v(i).submatches.count > 0) then : for j=0 to v(i).submatches.count-1 : echon(t&replicate(vbtab,n+2)&r&".SubMatches("&j&") -> """&v(i).submatches(j)&"""") : next : end if : next : echon(t&a&r&")") : f = true : end if : if issubmatch(v) then : echon(t&a&r&s&"SubMatch("&v.count&") (") : if (v.count > 0) then : for j=0 to v.count-1 : echon(t&replicate(vbtab,n+2)&r&"("&j&") -> """&v(j)&"""") : next : end if : echon(t&a&r&")") : f = true : end if : if ismail(v) then : echon(t&a&r&s&"IMessage(") : echon(t&replicate(vbtab,n+1)&r&s&".from -> "&"("&v.from&")") : echon(t&replicate(vbtab,n+1)&r&s&".to -> "&"("&v.to&")") : echon(t&replicate(vbtab,n+1)&r&s&".cc -> "&"("&v.cc&")") : echon(t&replicate(vbtab,n+1)&r&s&".bcc -> "&"("&v.bcc&")") : echon(t&replicate(vbtab,n+1)&r&s&".subject -> "&"("&v.subject&")") : echon(t&replicate(vbtab,n+1)&r&s&".htmlbody -> "&"("&v.htmlbody&")") : echon(t&replicate(vbtab,n+1)&r&s&".textbody -> "&"("&v.textbody&")") : echon(t&replicate(vbtab,n+1)&r&s&".bodypart.charset -> "&"("&v.bodypart.charset &")") : echon(t&replicate(vbtab,n+1)&r&s&".attachments("&v.attachments.count&") => {") : for each j in v.attachments : echon(t&replicate(vbtab,n+2)&r&s&"filename: ("&j.filename&")") : next : echon(t&replicate(vbtab,n+1)&r&s&"}") : echon(t&a&r&s&")") : f = true : end if : if not f then : echon(t&a&r&s&typename(v)&"(*)") : end if : if err.number <> 0 then : eechon("(dumper) => (n:"&err.number&" s:"&err.source&" d:"&err.description&")") : err.clear : end if : end function
+
+'-- #abbreviations
+'----------------------------------------------------------
+'*afso() :: 
+function afso() : set afso = wscript.createobject("scripting.filesystemobject") : end function
+'*ashell() ::
+function ashell() : set ashell = wscript.createobject("wscript.shell") : end function
+'*adic() :: 
+function adic() : set adic = wscript.createobject("scripting.dictionary") : end function
+'*aapp() ::
+function aapp() : set aapp = wscript.createobject("shell.application") : end function
+'*anet() ::
+function anet() : set anet = wscript.createobject("wscript.network") : end function
+'*aarg() :: 
+function aarg() : set aarg = wscript.arguments : end function
+'*axmlhttp() :: 
+function axmlhttp() : set axmlhttp = createobject("msxml2.xmlhttp") : end function
+'*alocator() ::
+function alocator() : set alocator = wscript.createobject("WbemScripting.SWbemLocator") : end function
+'*aconn() :: alocator
+function aconn() : set aconn = alocator.connectserver : end function
+'*aconnsrv(string,string,string,string) :: alocator \(computer,namespace,username,password)\
+function aconnsrv(c,n,u,p) : set aconnsrv = alocator.connectserver(c,n,u,p) : end function
+'+aan(string) :: iif, ea, aarg 
+function aan(n) : if isstring(n) then : aan = iif(ea(n),aarg.named(n),empty) : else : iecho("(aan) => wants (string)") : aan = empty : end if : end function
+'+aau(integer) :: aarg,iecho,
+function aau(n) : if isnumeric(n) then : if(aarg.unnamed.count>n) then : aau = aarg.unnamed(n) : else : iecho("(aau) => not found "&n&"th argument.") : aau = empty : end if : else : iecho("(aau) => wants (numeric)") : end if: end function
+'*adb() :: 
+function adb() : set adb = createobject("adodb.connection") : end function
+'*astream() :: 
+function astream() : set astream = createobject("adodb.stream") : end function
+'*axml() :: 
+function axml() : set axml = createobject("msxml2.domdocument") : end function
+
+'-- #filehandler
+'----------------------------------------------------------
+'*frwc(string, integer, boolean, integer) :: afso \(filename, mode, create_flg, charcode)\
+function frwc(n,m,f,c) : if isstring(n) and isinteger(m) and isinteger(c) and isboolean(f) then : set frwc = afso.opentextfile(n,m,f,c) : else : iecho("(frwc) => wants (string, integer, boolean, integer)") : end if : end function
+'*frw(filename, mode, create_flg) :: frwc 
+function frw(n,m,f) : set frw = frwc(n,m,f,0) : end function
+'*furw(string, integer, boolean) :: frwc \unicode := -1 means UTF-16LE BOM-added\
+function furw(n,m,f) : set furw = frwc(n,m,f,-1) : end function
+'*fuwrite(string) :: furw \f* function not to check exist file.\
+function fuwrite(n) : set fuwrite = furw(n,8,true) : end function
+'*furead(string) :: furw \f* function not to check exist file.\
+function furead(n) : set furead = furw(n,1,false) : end function
+'*fwrite(filename) :: frw \f* function not to check exist file.\
+function fwrite(n) : set fwrite = frw(n,8,true) : end function
+'*fowrite(filename) :: frw \overwrite file.\
+function fowrite(n) : set fowrite = frw(n,2,true) : end function
+'*fread(filename) :: frw \f* function not to check exist file.\
+function fread(n) : set fread = frw(n,1,false) : end function
+'*fsrw(string, integer, integer,integer) :: astream,isstring, isinteger, iecho \(charcode, type, separator, mode)\
+function fsrw(c,t,l,m) : if isstring(c) and isinteger(t) and isinteger(l) then : dim f : set f = astream() : f.charset = c : f.type = t : f.lineseparator = l : f.mode = m : f.open() : set fsrw = f : else : iecho("(fsrw) => wants (string, integer, integer)") : end if : end function
+'*fstream(string, integer) :: fsrw
+function fstream(c,m) : set fstream = fsrw(c,2,-1,m) : end function
+'fsread function returns stream_object, use property/method .eof/.readtext() to read file 
+'*fsread(string) :: fsreadm
+function fsread(n) : set fsread = fsreadm(n,"utf-8") : end function
+'*fsreadm(string, string) :: isstring, e, eecho, iecho, fstream
+function fsreadm(n,c) : if isstring(n) then : dim f : set f = fstream(c,16) : if e(n) then : f.loadfromfile(n) : else : eechon("file is missing ("&n&")") : end if : set fsreadm = f : else : iecho("(fsreadm) => wants (string)") : end if : end function
+'fswrite function returns stream_object, use method .writetext() and .savetofile() to write file 
+'*fswrite(string) :: fswritem
+function fswrite(n) : set fswrite = fswritem(n,"utf-8") : end function
+'*fswritem(string, string) :: isstring, e, iecho, fstream
+function fswritem(n,c) : if isstring(n) then : dim f : set f = fstream(c,3) : if e(n) then : f.loadfromfile(n) : f.position = f.size : else : call f.savetofile(n,2) : end if : set fswritem = f : else : iecho("(fswritem) => wants (string)") : end if : end function
+'+fswriten(string, string) :: fswritenm \fswriten(filename, string) write "string" to "file" by line\
+function fswriten(n,s) : fswriten = fswritenm(n,s,"utf-8") : end function
+'+fswritenm(string, string, string) :: isstring, fswrite, 
+function fswritenm(n,s,c) : if isstring(n) and isstring(s) then : dim f : set f = fswritem(n,c) : f.writetext(s&vbnewline) : call f.savetofile(n,2) : fswritenm = len(s) : else : iecho("(fswritenm) => wants (string,string)") : end if : end function
+'*frs(file) :: afso
+function frs(f) : set frs = afso.getfile(f).openastextstream(1) : end function
+'*fws(file) :: afso
+function fws(f) : set fws = afso.getfile(f).openastextstream(2) : end function
+'*fas(file) :: afso
+function fas(f) : set fas = afso.getfile(f).openastextstream(8) : end function
+
+'-- #log
+'----------------------------------------------------------
+'+flog(string) :: FUNCTION_FLOG_TYPENANE, 
+function flog(s) : flog = getref(FUNCTION_FLOG_TYPENAME)(s) : end function
+'+flog0(string) :: datetime, flog
+function flog0(s) : wscript.stdout.writeline(datetime()&"::"&s) : flog0 = len(s) : end function
+'+flog1(string) :: flog,fwrite, datetime, flogname
+function flog1(s) : on error resume next : do : err.clear : fwrite(flogname()).writeline(datetime()&"::"&s) : loop until (err.number=0) : flog1 = len(s) : end function
+'+flog2(string) :: flog,fwrite, datetime0
+function flog2(s) : on error resume next : do : err.clear : fwrite(flogname()).writeline(datetime()&"::"&s) : loop until (err.number=0) : flog2 = len(s) : end function
+'+flog3(string) :: FUNCTION_FLOG_EPID, getpid, e, flogname, FUNCTION_FLOG_ROTATE_COUNT, afso, filename, fwrite
+function flog3(s) : if isempty(FUNCTION_FLOG_EPID) then : getepid() : dim i : if e(flogname()&"."&FUNCTION_FLOG_ROTATE_COUNT) then : call afso.deletefile(flogname()&"."&FUNCTION_FLOG_ROTATE_COUNT) : end if : for i=FUNCTION_FLOG_ROTATE_COUNT-1 to 1 step -1 : if(e(flogname()&"."&i)) then : afso.getfile(flogname()&"."&i).name = filename(flogname()&"."&i+1) : end if : next : if e(flogname()) then : afso.getfile(flogname()).name = filename(flogname()&".1") : end if : end if : on error resume next : do : err.clear : fwrite(flogname()).writeline(datetime()&"::"&s) : loop until (err.number=0) : flog3 = len(s) : end function
+'+flog4(string) :: FUNCTION_FLOG_EPID, getpid, e, flogname, fread, rmatch, iif, FUNCTION_FLOG_ROTATE_COUNT, afso, filename, fwrite, 
+function flog4(s)
+if isempty(FUNCTION_FLOG_EPID) then
+getepid()
+if e(flogname()) then
+dim f,b
+b = fread(flogname()).readline
+if rmatch(b,"^\d\d\d\d\d\d\d\d\d\d\d\d$") then
+b = "20"&left(b,2)&"/"&mid(b,3,2)&"/"&mid(b,5,2)&" "&mid(b,7,2)&":"&mid(b,9,2)&":"&right(b,2)
+end if
+if rmatch(b,"^\d\d\d\d/\d\d*/\d\d* \d\d*:\d\d*:\d\d*(\.\d\d*)*$") then
+f = iif((datediff("d",cdate(b),now())=0), false, true)
+else
+f = true
+end if
+if f then
+dim i
+if e(flogname()&"."&FUNCTION_FLOG_ROTATE_COUNT) then
+call afso.deletefile(flogname()&"."&FUNCTION_FLOG_ROTATE_COUNT)
+end if
+for i=FUNCTION_FLOG_ROTATE_COUNT-1 to 1 step -1
+if(e(flogname()&"."&i)) then
+afso.getfile(flogname()&"."&i).name = filename(flogname()&"."&i+1)
+end if
+next
+if e(flogname()) then
+afso.getfile(flogname()).name = filename(flogname()&".1")
+on error resume next
+do
+err.clear
+fwrite(flogname()).writeline(now())
+loop until (err.number=0)
+end if
+end if
+else
+on error resume next
+do
+err.clear
+fwrite(flogname()).writeline(now())
+loop until (err.number=0)
+end if
+end if
+on error resume next
+do
+err.clear
+fwrite(flogname()).writeline(datetime()&"::"&s)
+loop until (err.number=0): flog4 = len(s)
+end function
+'+flog5(string) :: e, flogname, afso, FUNCTION_FLOG_ROTATE_FILESIZE, FUNCTION_FLOG_ROTATE_COUNT, filename, fwrite, 
+function flog5(s) : if e(flogname()) then : if (afso.getfile(flogname()).size >= FUNCTION_FLOG_ROTATE_FILESIZE) then : dim i : if e(flogname()&"."&FUNCTION_FLOG_ROTATE_COUNT) then : call afso.deletefile(flogname()&"."&FUNCTION_FLOG_ROTATE_COUNT) : end if : for i=FUNCTION_FLOG_ROTATE_COUNT-1 to 1 step -1 : if(e(flogname()&"."&i)) then : afso.getfile(flogname()&"."&i).name = filename(flogname()&"."&i+1) : end if : next : if e(flogname()) then : afso.getfile(flogname()).name = filename(flogname()&".1") : on error resume next : do : err.clear : fwrite(flogname()).writeline(now()) : loop until (err.number=0) : end if : end if : else : on error resume next : do : err.clear : fwrite(flogname()).writeline(now()) : loop until (err.number=0) : end if : on error resume next : do : err.clear : fwrite(flogname()).writeline(datetime()&"::"&s) : loop until (err.number=0) : flog5 = len(s) : end function
+'+flogname() :: FUNCTION_FLOG_FILENAME, FUNCTOIN_FLOG_LOGDIR, ef, iif, rmatch, eau, aan, datetime0, buildpath, basename
+function flogname() : if isempty(FUNCTION_FLOG_FILENAME) then : if not ef(FUNCTOIN_FLOG_LOGDIR) then : call mkdir(FUNCTOIN_FLOG_LOGDIR) : end if : FUNCTION_FLOG_FILENAME = iif(rmatch(FUNCTION_FLOG_TYPENAME,"flog[01345]"),iif(eau("logbase"),aan("logbase"),basename(wscript.scriptname)),left(datetime0(),8))&".log" : end if : flogname = buildpath(FUNCTOIN_FLOG_LOGDIR,FUNCTION_FLOG_FILENAME) : end function
+'+log(string) :: flog
+function log(s) : log = flog("(log) => "&s) : end function
+
+'-- #file utils
+'----------------------------------------------------------
+'+fheadn(string, integer) :: isstring, isinteger, e, frs, push, iecho
+function fheadn(f,n) : if isstring(f) and isinteger(n) then : if e(f) then : if (n>0) then : dim a,b : set a = frs(f) : b = array() : do until (a.line = n+1 or a.atendofstream) : call push(b,a.readline) : loop : fheadn = b : else : fheadn = array() : end if : else : iecho("(fheadn) => file is missing ("&f&")") : end if : else : iecho("(fheadn) => wants (string, integer)") : end if : end function
+'+ftailn(string, integer) :: isstring, isinteger, e, fas, frs, push, iecho
+function ftailn(f,n) : if isstring(f) and isinteger(n) then : if e(f) then : if (n>0) then : dim a,b,c,d : set a = frs(f) : c = fas(f).line : b = array() : do until a.line = c-n+1 : a.skipline : loop : do until a.atendofstream : d = a.line : call push(b,a.readline) : loop : if not(c = d) then : call push(b,"") : end if : ftailn = b : else : ftailn = array() : end if : else : iecho("(ftailn) => file is missing ("&f&")") : end if : else : iecho("(ftailn) => wants (string, integer)") : end if : end function
+'+fhead(string) :: fheadn
+function fhead(f) : fhead = fheadn(f,1) : end function
+'+ftail(string) :: ftailn
+function ftail(f) : ftail = ftailn(f,1) : end function
+'+fcat(string) :: frs
+function fcat(f) :: fcat = frs(f).readall :: end function
+'fcut(string, integer, integer) :: isstring, isinteger, iecho, e, fas, frs, push 
+function fcut(f,s,n) : dim l : if isstring(f) and isinteger(s) and isinteger(n) then : if s>n then : iecho("(fcut) => invalid start-end line.") : else : if e(f) then : l = fas(f).line : if n>l or 0>=s then : iecho("(fcut) => over end line/0 line selected") : else : dim a,b : set a = frs(f) : b = array() : echon a.line : do until (a.line=s) : a.skipline : loop : do until a.atendofline or a.line=n+1 : call push(b,a.readline) : loop : fcut = b : end if : else : iecho("(fcut) => file is missing ("&f&")") : end if : end if : end if : end function
+'+farray(string) :: f2a
+function farray(f) : farray = f2a(f) : end function
+'+ftouch(string) :: afso,e 
+function ftouch(f) : if not e(f) then : call afso.createtextfile(f) : ftouch = f : end if : end function
+'+fcleanup(string) :: fcleanupn
+function fcleanup(f) : fcleanup = fcleanupn(f,"/\*(.|\n)+?\*/","^\s*(#|'|//|--).*$") : end function
+'fcleanupn wants (filename, section_regexp_for_remove, line_regexp_for_remove)
+'+fcleanupn(string, string, string) :: e, isstring, rremove, f2v, push, iecho
+function fcleanupn(f,s1,s2) : dim b,a : a = array() : if e(f) and isstring(s1) and isstring(s2) then : for each b in split(rremove(f2v(f),s1),vbnewline) : b = rremove(rremove(b,s2),"^\s*$") : if len(b)>0 then : call push(a,b) : end if : next : fcleanupn = a : else : iecho("(fcleanupn) => wants (string, string, string)") : end if : end function
+'fftail(string) :: isstring, e, iecho, frs, echon, 
+function fftail(fn) : dim f : if isstring(fn) then : if e(fn) then : iecho("(fftail) => if exist """&absolutepath(fn)&".end"" then, exit fftail()") : set f = frs(fn) : do while true : if not f.atendofstream then : echon fn&" : "&f.readline : end if : if e(absolutepath(fn)&".end") then : exit do : end if : loop : else : iecho("(fftail) => file is missing ("&fn&")") : end if : else : iecho("(fftail) => wants (string)") : end if : end function : 
+'+fendline(string) :: e,fas, ftailn, iecho \return last readable line\
+function fendline(f) : dim s : s = "" : if e(f) then : dim l,i : i = 1 : l = fas(f).line : do until (len(s)>0 or i>l) : s = ftailn(f,i)(0) : i = i+1 : loop : else : iecho("(fendline) => file is missing("&f&")") : end if : fendline = s : end function
+'+fgrep(string, string) :: e, isstring, frs, rmatch, push, iecho \file grep\
+function fgrep(f,s) : dim c : c = array() : if e(f) then : if isstring(f) and isstring(s) then : dim a,b : set a = frs(f) : do until a.atendofstream : b = a.readline : if rmatch(b,s) then : call push(c,b) : end if : loop : else : iecho("(fgrep) => wants (string, string)") : end if : else : iecho("(fgrep) => file is missing.("&f&")") : end if : fgrep = c : end function
+
+'-- #threads
+'----------------------------------------------------------
+'th_limitcheck(array,integer) :: iecho, isinteger, iswshexec_array, FUNCTION_TH_LIMITCHECK_WAIT, FUNCTION_TH_LIMITCHECK_WAIT_TIME, echon,
+function th_limitcheck(c,n) : if not isinteger(n) then : iecho("(th_limitcheck) => invalid limit parameter("&typename(n)&"), fallback n=1.") : n = 1 : end if : if not (isarray(c)) then : iecho("(th_limitcheck) => invalid command_array, no operation.") : iecho("(th_limitcheck) => wants (array, integer)") : exit function : end if : dim p,a,w : w = true : if iswshexec_array(c) then : do : p = 0 : for each a in c : if (a.status <> 0) then : p = p+1 : end if : next : if (FUNCTION_TH_LIMITCHECK_WAIT) then : wscript.sleep(FUNCTION_TH_LIMITCHECK_WAIT_TIME) : end if : if w and (ubound(c)+1-p>=n) then : iecho("(th_limitcheck) => encountered thread limit("&n&")") : w = false : end if : loop until (ubound(c)+1-p<n) : end if : end function
+'th_done(array) :: iswshexec_array, echon, iif,
+function th_done(c) : dim a,f : if iswshexec_array(c) then : iecho("(th_done) => wait for all threads to terminate.") : do : f = 0 : for each a in c : f = f + iif(a.status<>0, 1, 0) : next : loop until (f=ubound(c)+1) : end if : iecho("(th_done) => done.") : end function
+'+th_do(integer, array) :: eechon, isinteger, iecho, rmatch, env, th_limitcheck, push, exec, th_done, FUNCTION_TH_DO_TIME_PER_LAUNCH
+function th_do(limit,cmdlist) : if not isarray(cmdlist) then : eechon("(th_do) => wants (integer, array)") : exit function : end if : if not isinteger(limit) then : iecho("(th_do) => invalid limit value type("&typename(limit)&"), fallback limit=1.") : limit = 1 : end if : if cint(limit)<0 then : iecho("(th_do) => invalid limit value("&limit&"), fallback limit=1.") : limit = 1 : end if : if cint(limit)=0 then : iecho("(th_do) => autorange limit value, set limit="&env("%NUMBER_OF_PROCESSORS%")&".") : if rmatch(env("%NUMBER_OF_PROCESSORS%"),"[1-9][0-9]*") then : limit = cint(env("%NUMBER_OF_PROCESSORS%")) : else : iecho("(th_do) => invalid enviroment(%NUMBER_OF_PROCESSORS%), fallback limit=1.") : limit = 1 : end if : end if : dim c,cmd : cmd = array() : for each c in cmdlist : call th_limitcheck(cmd,limit) : call push(cmd,exec(c)) : wscript.sleep FUNCTION_TH_DO_TIME_PER_LAUNCH : next : th_do = th_done(cmd) : end function
+
+'-- #database
+'----------------------------------------------------------
+'returns dictionary_object {"_field" => array, "0" => dic,..., "_row" => integer}
+'*db_query(string,string) :: adb, adic, push, dic, 
+function db_query(s,q) : dim c,d,r,field,fields,i,ret,con : set con = adb() : fields = array() : set d = adic() : c = 0 : con.open(s) : set ret = con.execute(q) : for i=0 to ret.fields.count-1 : call push(fields,ret(i).name) : next : call dic(d,"_field",fields) : do until (ret.eof) : set r = adic() : for each field in fields : if (ret(field).type = 128 or ret(field).type = 204 or ret(field).type = 205) then : call dic(r,field,"_BINARY") : else : call dic(r,field,ret(field).value) : end if : next : call dic(d,c,r) : c = c+1 : ret.movenext : loop : call dic(d,"_row",c) : con.close() : set db_query = d : end function
+'*db_q2d(string,query) :: db_query
+function db_q2d(s,q) : set db_q2d = db_query(s,q) : end function
+'+db_q2a(string, query) :: db_q2d, \string wants connection_string like "Provider=SQLOLEDB;server=InstanceName;Integrated Security=SSPI;"\
+function db_q2a(s,q) : dim a(),i,j,d : set d = db_q2d(s,q) : redim a(ubound(d("_field")),d("_row")-1) : for j=1 to d("_row") : for i=0 to ubound(d("_field")) : a(i,j-1) = d(j-1)(d("_field")(i)) : next : next : db_q2a = a : end function
+'?db_isdb(object) :: isdictionary, isinteger
+function db_isdb(o) : db_isdb = isarray(o("_field")) and isdictionary(o) and isinteger(o("_row")) : end function
+'+db_view(object) :: db_isdb, righ, eecho
+function db_view(o) : dim i,f,r,a : if db_isdb(o) then : for i=0 to ubound(o("_field")) : r = r&o("_field")(i)&"," : next : a = vbnewline&righ(r,1)&vbnewline : for i=0 to o("_row")-1 : r = "" : for each f in o("_field") : r = r&o(i)(f)&"," : next : a = a&righ(r,1)&vbnewline : next : else : eechon("(db_view) => not db_results object.") : end if : db_view = a : end function : 
+'*db_query2(string, string) :: isping, rremove, exec, adic, push, pull, dic, rmatch, 
+function db_query2(i, q) : if isping(rremove(i,"\\.*$")) then : dim d,r,b,a,f,j,g,k : set b = exec(FUNCTION_DB_QUERY2_CMD&" -S "&i&" -Q """&q&""""&FUNCTION_DB_QUERY2_CMD_OPTION) : r = array() : f = array() : set d = adic() : k=0 : do until b.stdout.atendofstream : call push(r,b.stdout.readline) : loop : for each a in split(pull(r,0),",") : call push(f,a) : next : call dic(d,"_field",f) : for each b in r : set g = adic() : if not (rmatch(b,"^[,-]*$")) then : j=0 : for each a in split(b,",") : call dic(g,f(j),a) : j = j+1 : next : call dic(d,k,g) : k=K+1 : end if : next : call dic(d,"_row",k) : set db_query2 = d : else : set db_query2 = adic() : end if : end function
+
+'-- #xml
+'*xml(string) :: axml, e, iecho, 
+function xml(s) : set xml = axml() : if e(s) then : if not xml.load(s) then : iecho("(xml) => invalid xml format source.") : end if : else : iecho("(xml) => source file is missing.("&s&")") : end if : end function
+
+'-- #WMI class
+'class wm for WMI. functions have wm_ prefix is virtual function for //job:deptree.
+class wm
+'variables ------------------------------------------------
+private w
+'functions - embedded -------------------------------------
+'wm_class_initialize() :: adic, dic, wm_set_computer, iecho
+''class_initialize() :: adic, dic, set_computer, iecho
+private sub class_initialize : set w = adic() : call dic(w,"islocalusewmi",isusewmi()) : if w("islocalusewmi") then : set_computer(anet.computername) : else : iecho("(wm.class_initialize) => this computer cannot use wmi.") : end if : end sub
+'wm_class_terminate() :: iecho, CLASS_WM_TERMINATE_WAITTIME
+''class_terminate() :: iecho, CLASS_WM_TERMINATE_WAITTIME
+private sub class_terminate : set w = nothing : iecho("(wm.class_terminate) => terminating wm...") : wscript.sleep CLASS_WM_TERMINATE_WAITTIME : end sub
+'functions - computer --------------------------------------
+'wm_set_computer() :: dic, wm_isvalidcomputer, wm_isvalidclass, ed
+''set_computer() :: dic, isvalidcomputer, isvalidclass, ed
+private sub set_computer(t) : call dic(w,"computer",t) : call dic(w,"isvalidcomputer",isvalidcomputer()) : if ed(w,"class") then : call dic(w,"isvalidclass",isvalidclass()) : end if : end sub
+'wm_computer() :: isstring, wm_set_computer, iecho
+''computer() :: isstring, set_computer, iecho
+public property let computer(t) : if isstring(t) then : set_computer(t) : else : iecho("(wm.computer) => wants (string)") : end if : end property
+'?wm_isvalidcomputer() :: dic, isping, 
+''?isvalidcomputer() :: dic, isping, 
+private function isvalidcomputer() : call dic(w,"isping",isping(w("computer"))) : if w("isping") then : on error resume next : call dic(w,"srvex",getobject("winmgmts:\\"&w("computer")&"\root\cimv2")) : isvalidcomputer = not (err.number <> 0) : err.clear : else : isvalidcomputer = false : end if : if not isvalidcomputer then : set w("srvex") = nothing : end if : end function
+'functions - class -----------------------------------------
+'wm_set_class() :: dic, wm_isvalidclass
+''set_class() :: dic, isvalidclass
+private sub set_class(c) : call dic(w,"class",c) : call dic(w,"isvalidclass",isvalidclass()) : end sub
+'wm_class() :: isstring, wm_set_class, iecho, dic, wm_isvalidclass
+''class() :: isstring, set_class, iecho, dic, isvalidclass
+public property let [class](c) : if isstring(c) then : set_class(c) : else : iecho("(wm.class) => wants (string)") : end if : call dic(w,"isvalidclass",isvalidclass()) : end property
+'?wm_isvalidclass() :: dic, 
+''?isvalidclass() :: dic, 
+private function isvalidclass() : if w("isping") then : on error resume next : call dic(w,"objex",getobject("winmgmts:\\"&w("computer")&"\root\cimv2:"&w("class"))) : call dic(w,"objset",getobject("winmgmts:\\"&w("computer")&"\root\cimv2").instancesof(w("class"))) : isvalidclass = not (err.number <> 0) : err.clear : else : isvalidclass = false : end if : if not isvalidclass then : set w("objectex") = nothing : set w("objectset") = nothing : end if : end function
+'functions - execquery -------------------------------------
+'*wm_execquery() :: iecho
+''*execquery() :: iecho
+public function execquery() : if w("islocalusewmi") and w("isvalidcomputer") and w("isvalidclass") and w("isping") then : set execquery = w("srvex").execquery("select * from "&w("class")) : else : iecho("(wm.execquery) => unfilled condition. check computer/class name or pinging to host") : end if : end function
+'*wm_execquery2d() :: adic, dic, iecho
+''*execquery2d() :: adic, dic, iecho
+public function execquery2d() : if w("islocalusewmi") and w("isvalidcomputer") and w("isvalidclass") and w("isping") then : dim d,a,b,c,count : count = 0 : set d = adic() : for each a in w("srvex").execquery("select * from "&w("class")) : set c = adic() : for each b in a.properties_ : call dic(c, b.name, b.value) : next : call dic(d,count,c) : count = count + 1 : next : set execquery2d = d : else : iecho("(wm.execquery2d) => unfilled condition. check computer/class name or pinging to host") : end if : if not isobject(execquery2d) then : set execquery2d = adic() : end if : end function
+'*wm_q() :: wm_execquery
+''*q() :: execquery
+public function q() : set q = execquery() : end function
+'*wm_q2d() :: wm_execquery2d
+''*q2d() :: execquery2d
+public function q2d() : set q2d = execquery2d() : end function
+'*wm_filteredquery(string) :: isstring, wm_hasproperty, eecho, iecho
+''*filteredquery(string) :: isstring, hasproperty, eecho, iecho
+public function filteredquery(f) : if w("islocalusewmi") and w("isvalidcomputer") and w("isvalidclass") and w("isping") then : if isstring(f) then : dim q : set q = w("srvex").execquery("select "&f&" from "&w("class")) : if not hasproperty(f) then : eechon("(wm.filteredquery) => return_object has no such property('"&f&"') on class('"&w("class")&"')") : set filteredquery = nothing : else : set filteredquery = q : end if : else : iecho("(wm.filteredquery) => wants (string)") : end if : else : iecho("(wm.filteredquery) => unfilled condition. check computer/class name or pinging to host") : end if : end function
+'*wm_filteredquery2d(string) :: isstring, adic, wm_hasproperty
+''*filteredquery2d(string) :: isstring, adic, hasproperty
+public function filteredquery2d(f) : if w("islocalusewmi") and w("isvalidcomputer") and w("isvalidclass") and w("isping") then : if isstring(f) then : dim d,a,b,c,count,q : count = 0 : set d = adic() : set q = w("srvex").execquery("select "&f&" from "&w("class")) : if not hasproperty(f) then : eechon("(wm.filteredquery2d) => return_object has no such property('"&f&"') on class('"&w("class")&"')") : set filteredquery2d = nothing : else : for each a in q : set c = adic() : for each b in a.properties_ : call dic(c, b.name, b.value) : next : call dic(d,count,c) : count = count + 1 : next : set filteredquery2d = d : end if : else : iecho("(wm.filteredquery2d) => wants (string)") : end if : else : iecho("(wm.filteredquery2d) => unfilled condition. check computer/class name or pinging to host") : end if : if not isobject(filteredquery2d) then : set filteredquery2d = adic() : end if : end function
+'*wm_fq(string) :: wm_filteredquery
+''*fq(string) :: filteredquery
+public function fq(f) : set fq = filteredquery(f) : end function
+'*wm_fq2d(string) :: wm_filteredquery2d
+''*fq2d(string) :: filteredquery2d
+public function fq2d(f) : set fq2d = filteredquery2d(f) : end function
+'functions - check class -----------------------------------
+'?wm_hasproperty(string) :: isstring, rmatchi, iecho
+''?hasproperty(string) :: isstring, rmatchi, iecho
+private function hasproperty(f) : hasproperty = false : if isstring(f) then : dim a,b : for each a in q() : for each b in a.properties_ : if rmatchi(b.name,f) then : hasproperty = true : exit for : end if : next : exit for : next : else : iecho("(wm.hasproperty) => wants (string)") : end if : end function : 
+'functions - debug -----------------------------------------
+'wm_dump() :: dumper
+''dump() :: dumper
+public function dump() : dumper(w) : end function
+'----------------------------------------------------------
+end class
+'<!-- this line works as delimitre -->
+'script starts here
+
+function flogx(s)
+	dim i
+	if isempty(FUNCTION_FLOG_EPID) then
+		FUNCTION_FLOG_EPID = second(now())
+	end if
+	if not FUNCTION_FLOG_EPID = second(now()) then
+		'rotate
+		if e(flogname()&"."&FUNCTION_FLOG_ROTATE_COUNT) then
+			call afso.deletefile(flogname()&"."&FUNCTION_FLOG_ROTATE_COUNT)
+		end if
+		for i=FUNCTION_FLOG_ROTATE_COUNT-1 to 1 step -1
+			if e(flogname()&"."&i) then
+				afso.getfile(flogname()&"."&i).name = filename(flogname()&"."&i+1)
+			end if
+		next
+		afso.getfile(flogname()).name = filename(flogname()&".1")
+		FUNCTION_FLOG_EPID = second(now())
+	end if
+	fwrite(flogname()).writeline(datetime()&" :: "&s)
+	flogx = len(s)
+end function 
+
+flogx("test1")
+wscript.sleep 1000
+flogx("test2")
+
+wscript.sleep 1000
+flogx("test3")
+flogx("test4")
+wscript.sleep 1000
+flogx("test5")
+
+
+]]>
+</script>
+</job>
+
+<!-- shows functions dependency -->
+<!-- ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -->
+<job id="deptree" error="true" debug="false">
+<runtime><usage>Usage: cscript.exe skel.wsf //job:deptree "function_name"|functions
+Usage: cscript.exe skel.wsf //job:deptree /argument:argument_type</usage></runtime>
+<script language="VBScript">
+<![CDATA[
+option explicit
+
+function rmatch(s,p) : rmatch = rgp(p).test(s) : end function
+function rgp(p) : set rgp = new regexp : rgp.pattern = p : end function
+function getmatch(s,p) : set getmatch = rgo(p,"g").execute(s) : end function
+function rgo(p,o) : set rgo = new regexp : rgo.pattern = p : rgo.ignorecase = (instr(o,"i")>0) : rgo.global = (instr(o,"g")>0) : rgo.multiline = (instr(o,"o")>0) : end function
+function dic(d,n,byval v) : if(ed(d,n)) then : if(isobject(v)) then : set d(n) = v : else d(n) = v : end if : else : d.add n, v : end if : end function
+function ed(d,k) : if isdictionary(d) then : ed = d.exists(k) : else : ed = false : end if : end function
+function isdictionary(v) : isdictionary = strcmp(typename(v),typename(wscript.createobject("scripting.dictionary"))) : end function
+function rremove(s,p) : rremove = rreplace(s,p,"") : end function
+function rreplace(s,p,r) : rreplace = rgo(p,"g").replace(s,r) : end function
+function ea(a) : if not isarray(a) then : ea = wscript.arguments.named.exists(a) : else : ea = false : end if : end function
+function aau(n) : if(wscript.arguments.unnamed.count>n) then : aau = wscript.arguments.unnamed(n) : else : aau = empty : end if : end function
+function strcmp(s,t) : strcmp = ((instr(lcase(s),lcase(t))>0) and len(s) = len(t)) : end function
+function push(a,v) : if isarray(a) then : redim preserve a(ubound(a)+1) : call bind(a(ubound(a)),v) : push = a : end if : end function
+function bind(byref k,byval v) : if(isobject(v)) then : set k = v : else k = v : end if : end function
+function qsort(a) : dim i,j,n : n = ubound(a) : j = 0 : do until (j = n) : for i=0 to ubound(a)-1 : if(a(i) > a(i+1)) then : call swap(a(i),a(i+1)) : end if : next : j = j + 1 : loop : qsort = a : end function
+function swap(a,b) : dim t : call bind(t,b) : call bind(b,a) : call bind(a,t) : end function
+function echon(s) : if iscscript() then : wscript.stdout.writeline(s) : end if : end function
+function echo(s) : if iscscript() then : wscript.stdout.write(s) : end if : end function
+function iscscript() : iscscript = (instr(wscript.createobject("scripting.filesystemobject").getfilename(wscript.fullname),"cscript.exe")>0) : end function
+
+dim buf,bufdic
+dim d,a,b : b = array()
+dim s : set s = wscript.createobject("scripting.filesystemobject").getfile(wscript.scriptfullname).openastextstream(1)
+dim p : p = "^'(\?|\+|\*)*([a-zA-Z_\d]*)\((.*)\)\s*::\s*([a-zA-Z\d, _]*)(\\(.*)\\)*\s*$"
+dim f,flg : flg = false
+dim dep : set dep = wscript.createobject("scripting.dictionary")
+dim called : set called = wscript.createobject("scripting.dictionary")
+do until s.atendofstream
+	buf = s.readline
+	if rmatch(buf,"^'<!-- this line works as delimitre -->$") then : flg = not flg : end if
+	if flg then
+		if rmatch(buf,p) then
+			set f = getmatch(buf,p)
+			set bufdic = wscript.createobject("scripting.dictionary")
+
+			call dic(bufdic, "type", f(0).submatches(0))
+			call dic(bufdic, "name", f(0).submatches(1))
+			call dic(bufdic, "args", split(replace(rremove(f(0).submatches(2),",\s*$")," ",""),","))
+			call dic(bufdic, "deps", split(replace(rremove(f(0).submatches(3),",\s*$")," ",""),","))
+			call dic(bufdic, "comments", f(0).submatches(5))
+			
+			call dic(dep, f(0).submatches(1), bufdic)
+		end if
+	end if
+loop
+
+'dumper(dep)
+
+if ea("extract") then
+	echo("use //job:extract")
+	wscript.quit(0)
+end if
+
+if ea("argument") then
+	if (len(wscript.arguments.named("argument"))>1) then
+		call arguments(wscript.arguments.named("argument"))
+	else
+		echon("[ERR ] - missing property")
+		echon("type_names are:")
+		call typenames()
+	end if
+	wscript.quit(0)
+end if
+
+if wscript.arguments.count>0 then
+	if ed(dep,aau(0)) then
+		echon("function "&aau(0)&"() depend on: ")
+		call dic(called, aau(0), aau(0))
+		call tree(0,aau(0),dep(aau(0))("deps"))
+		echon("")
+		echon("function "&aau(0)&"() applied on: ")
+		call applied(aau(0))
+	elseif strcmp(aau(0),"functions") then
+		for each d in dep
+			call push(b, dep(d)("name"))
+		next
+		for each d in b
+			echon(d)
+		next
+	else
+		echon("[ERR ] - undefined function "&aau(0)&"()")
+	end if
+else
+	echon("Usage: cscript skel.wsf //job:deptree ""function_name""|functions")
+	echon("Usage: cscript skel.wsf //job:deptree /arguments:""type_name""")
+end if
+
+
+function tree(i,fn,dp)
+	dim f
+	echon(string(i," ")&"+- "&fn&"()")
+	for each f in dp
+		if ed(dep,f) then
+			if (ubound(dep(f)("deps"))>-1) then
+				if not (ed(called, f)) then
+					call dic(called , f, f)
+					call tree(i+1, f, dep(f)("deps"))
+				else
+					echon(string(i+1," ")&"+- "&f&"() ...")
+				end if
+			else
+				echon(string(i+1," ")&"+- "&f&"()")
+			end if
+		else
+			if rmatch(f,"[A-Z_][A-Z_0-9]*") then
+				echon(string(i+1," ")&"+- "&f&" [CONST]")
+			else
+				echon(string(i+1," ")&"+- "&f&"() [UNDEFINED]")
+				echon("[ERR] - undefined function. "&f&"()")
+			end if
+		end if
+	next
+end function
+
+function applied(fn)
+	dim f
+	for each f in dep
+		for each d in dep(f)("deps")
+			if strcmp(d,fn) then
+				echon(" - "&f&"()")
+			end if
+		next
+	next
+end function
+
+function arguments(fn)
+	dim f
+	for each f in dep
+		if inarray(dep(f)("args"),fn) then
+			echon(" - "&f&string(20-len(f)," ")&"("&join(dep(f)("args"),", ")&")")
+		end if
+	next
+end function
+
+function inarray(a,v)
+	dim d
+	if isarray(a) then
+		for each d in a
+			if (d=v) then
+				inarray = true
+				exit function
+			end if
+		next
+	end if
+	inarray = false
+end function
+
+function typenames()
+	dim a,b : set b = wscript.createobject("scripting.dictionary")
+	for each f in dep
+		for each a in dep(f)("args")
+			call dic(b,a,a)
+		next
+	next
+	for each a in b
+		echon(a)
+	next
+end function
+]]>
+</script>
+</job>
+
+<!-- extract skel.vbs from skel.wsf -->
+<!-- ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -->
+<job id="extract" error="true" debug="false">
+<runtime><usage>Usage: cscript.exe skel.wsf //job:extract [/project[:project_name]|project_name] [/overwrite]</usage></runtime>
+<script language="VBScript">
+<![CDATA[
+option explicit
+
+function aan(n) : aan = iif(ea(n),aarg.named(n),empty) : end function
+function aarg() : set aarg = wscript.arguments : end function
+function aau(n) : if(aarg.unnamed.count>n) then : aau = aarg.unnamed(n) : else : aau = empty : end if : end function
+function adic() : set adic = wscript.createobject("scripting.dictionary") : end function
+function afso() : set afso = wscript.createobject("scripting.filesystemobject") : end function
+function bind(byref k,byval v) : if(isobject(v)) then : set k = v : else k = v : end if : end function
+function e(n) : e = afso.fileexists(n) : end function
+function ea(a) : ea = aarg.named.exists(a) : end function
+function eau(a) : eau = (ea(a) and len(aan(a))>0) : end function
+function ed(d,k) : if isdictionary(d) then : ed = d.exists(k) : else : ed = false : end if : end function
+function ef(n) : ef = afso.folderexists(n) : end function
+function fcat(f,byval l) : dim i,a : set a = fread(f) : if(l>0) then : do until (l=0) : fcat = fcat & a.readline & vbnewline : l = l - 1 : loop : else : set a = fread(f) : for i=1 to afso.getfile(f).openastextstream(8).line + l : a.skipline : next : do until a.atendofstream : fcat = fcat & a.readline & vbnewline : loop : end if : end function
+function fread(n) : set fread = frw(n,1,false) : end function
+function frs(f) : set frs = afso.getfile(f).openastextstream(1) : end function
+function frw(n,m,f) : set frw = frwc(n,m,f,0) : end function
+function frwc(n,m,f,c) : set frwc = afso().opentextfile(n,m,f,c) : end function
+function fwrite(n) : set fwrite = frw(n,8,true) : end function
+function getmatch(s,p) : set getmatch = rgo(p,"g").execute(s) : end function
+function iif(c,t,f) : if(c) then : call bind(iif,t) : else : call bind(iif,f) : end if : end function
+function isroot(n) : isroot = rmatch(n,"^[a-zA-Z]:(\\)*$") : end function
+function isdictionary(v) : isdictionary = strcmp(typename(v),"dictionary") : end function
+function mkdir(n) : if(strcmp(n,"\") and not isroot(n)) then : call mkdir(afso.getparentfoldername(n)) : end if : if(not ef(n)) then : mkdir = afso.createfolder(n) : end if : end function
+function rgp(p) : set rgp = new regexp : rgp.pattern = p : end function
+function rgo(p,o) : set rgo = new regexp : rgo.pattern = p : rgo.ignorecase = strcmp(o,"i") : rgo.global = strcmp(o,"g") : rgo.multiline = strcmp(o,"m") : end function
+function rmatch(s,p) : rmatch = rgp(p).test(s) : end function
+function strcmp(s,t) : strcmp = (instr(lcase(s),lcase(t))>0) : end function
+function max(v,r) : max = iif(v>r,v,r) : end function
+function f2d(n,arr) : dim d : set d = adic() : if e(n) then : dim f,b : set f = frs(n) : if isarray(arr) then : if (ubound(arr)=2) then : if rmatch(arr(1),"^\d\d*$") and rmatch(arr(2),"^\d\d*$") then : dim m : m = max(arr(1),arr(2)) + 1 : do until f.atendofstream : b = f.readline : if rmatch(b,arr(0)) then : set b = getmatch(b,arr(0)) : if (b(0).submatches.count>=m) then : if ed(d, trim(b(0).submatches(arr(1)))) then : d(trim(b(0).submatches(arr(1)))) = b(0).submatches(arr(2)) : else : d.add trim(b(0).submatches(arr(1))), b(0).submatches(arr(2)) : end if : else : exit do : end if : end if : loop : end if : else : do until f.atendofstream : b = f.readline : if rmatch(b,arr(0)) then : b = split(b,arr(1)) : if ed(d,trim(b(0))) then : d(trim(b(0))) = b(1) : else : d.add trim(b(0)), b(1) : end if : end if : loop : end if : else : do until f.atendofstream : b = f.readline : if(instr(b,arr)) then : b = split(b,arr) : if ed(d,trim(b(0))) then : d(trim(b(0))) = b(1) : else : d.add trim(b(0)), b(1) : end if : end if : loop : end if : end if : set f2d = d : end function
+
+'extract own function
+function extract(vbs)
+	dim f : set f = fread(wscript.scriptfullname)
+	dim buf,flg : flg = false
+	fwrite(vbs).writeline "const skelv = """&replace(replace(replace(afso.getfile(wscript.scriptfullname).datelastmodified," ",""),"/",""),":","")&""""
+	do until (f.atendofstream)
+		buf = f.readline
+		flg = iif(rmatch(buf,"^'<!-- this line works as delimitre -->$"),not flg,flg)
+		if(flg) then
+			fwrite(vbs).writeline buf
+		end if
+	loop
+end function
+
+dim pname : pname = iif(eau("project"),aan("project"),aau(0))
+dim vbs : vbs = ".\"&pname&"\lib\skel.vbs"
+dim wsf : wsf = ".\"&pname&"\"&pname&".wsf"
+
+if(aarg.count<1) then
+	call extract("skel.vbs")
+	wscript.quit(0)
+end if
+
+if(not ef(pname)) then
+	call mkdir(pname&"\lib")
+end if
+
+if(e(vbs)) then
+	if(ea("overwrite")) then
+		afso.getfile(vbs).delete
+	else
+		wscript.stdout.writeline vbs&" is already exists"
+		wscript.quit
+	end if
+end if
+
+if(e(wsf)) then
+	if(ea("overwrite")) then
+		afso.getfile(wsf).delete
+	else
+		wscript.stdout.writeline wsf&" is already exists"
+		wscript.quit
+	end if
+end if
+
+call extract(vbs)
+
+if e("checkfunc.wsf") then
+	fwrite(".\"&pname&"\lib\functions.txt").writeline(wscript.createobject("wscript.shell").exec("cscript "&wscript.scriptfullname&" //job:deptree functions").stdout.readall)
+	afso.copyfile "checkfunc.wsf", ".\"&pname&"\lib\checkfunc.wsf", true
+	afso.copyfile "checkfunc.bat", ".\"&pname&"\lib\checkfunc.bat", true
+end if
+'fwrite(".\"&pname&"\lib\args.txt").writeline("")
+'fwrite(".\"&pname&"\lib\help.txt").writeline("")
+
+fwrite(wsf).write replace(replace(fcat(wscript.scriptfullname,6),"<!-- ","")," -->","")&"option explicit"&vbnewline&vbnewline&"'script starts here"&vbnewline&vbnewline&vbnewline&vbnewline&fcat(wscript.scriptfullname,-4)
+
+]]>
+</script>
+</job>
+
+<!-- version of skel.wsf -->
+<!-- ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -->
+<job id="version" error="true" debug="false">
+<runtime><usage>Usage: cscript.exe skel.wsf //job:version</usage></runtime>
+<script language="VBScript">
+<![CDATA[
+option explicit
+
+wscript.echo replace(replace(replace(createobject("Scripting.FileSystemObject").getfile(wscript.scriptfullname).datelastmodified," ",""),"/",""),":","")
+
+]]>
+</script>
+</job>
+</package>
