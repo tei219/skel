@@ -158,7 +158,7 @@ function ea(s) : call valid_arguments("ea", array(s), array("string/empty")) : e
 '?eau(string/empty) :: valid_arguments, ea, aan \(named_argument) is exists and have length\
 function eau(s) : call valid_arguments("eau",array(s),array("string/empty")) : eau = (ea(s) and len(aan(s))>0) : end function
 '?ed(dictionary, string) :: valid_arguments \(dictionary, key_string)\
-function ed(d, s)  : call valid_arguments("ed",array(d,s),array("dictionary","value")) : ed = d.exists(s) : end function
+function ed(d, s) : call valid_arguments("ed",array(d,s),array("dictionary","value")) : ed = d.exists(s) : end function
 '+ecmd(string) :: valid_arguments, FUNCTION_ECMD_EXT, buildpath \(command_string), search command and if found, returns command file path\
 function ecmd(s) : dim p, c : call valid_arguments("ecmd",array(s),array("string")) : for each p in split(env("%path%")&";.\",";") : for each c in FUNCTION_ECMD_EXT : if e(buildpath(p,s&c)) then : ecmd = buildpath(p,s&c) : exit function : end if : next : next : end function
 '--
@@ -278,9 +278,9 @@ function rremove(s,p) : call valid_arguments("rreplace",array(s,p),array("string
 
 '# strings #
 '?strcmp(string, string) :: valid_arguments \strcmp returns loose match result, strcmp("Test","test") => true\
-function strcmp(s,t) : strcmp = false : call valid_arguments("strcmp",array(s,t),array("string","string")) : strcmp = (lcase(s) = lcase(t))  : end function
+function strcmp(s,t) : strcmp = false : call valid_arguments("strcmp",array(s,t),array("string","string")) : strcmp = (lcase(s) = lcase(t)) : end function
 '?strcmpr(string, string) :: valid_arguments \rstrcmp returns strict match result, rstrcmp("Test","test") => false\
-function strcmpr(s,t) : strcmpr = false : call valid_arguments("strcmpr",array(s,t),array("string","string")) : strcmpr = (s = t)  : end function
+function strcmpr(s,t) : strcmpr = false : call valid_arguments("strcmpr",array(s,t),array("string","string")) : strcmpr = (s = t) : end function
 '--
 '+dleft(string, integer/long/single) :: valid_arguments \(target, delete_position) delete from left\
 function dleft(s,n) : call valid_arguments("dleft",array(s,n),array("string","integer/long/single")) : if len(s)>n then : dleft = right(s, len(s)-n) : else dleft = "" : end if : end function
@@ -307,7 +307,7 @@ function padding_left(s,c,n) : padding_left = ppadding(s,c,n,true) : end functio
 function divide(s,c) : call valid_arguments("divide",array(s,c),array("string","string")) : if instr(s,c)>0 then : divide = array(split(s,c)(0), dleft(s,len(split(s,c)(0)&c))) : else : divide = array(s,"") : end if : end function
 'e.g. String( "test string" ) => String(test string), String( "te st" .) => String("te st" .)
 '+btrim(string) :: valid_arguments, rmatch, getsubmatch \brackets trim\
-function btrim(s) : dim b : call valid_arguments("btrim",array(s),array("string"))  : b = trim(s) : if rmatch(b,"^""(.*)""$") then : b = getsubmatch(b,"^""(.*)""$")(0) : end if : btrim = b : end function
+function btrim(s) : dim b : call valid_arguments("btrim",array(s),array("string")) : b = trim(s) : if rmatch(b,"^""(.*)""$") then : b = getsubmatch(b,"^""(.*)""$")(0) : end if : btrim = b : end function
 '--
 '+chop(string) :: valid_arguments, dright \returns removed string, alias to dright()\
 function chop(s) : call valid_arguments("chop",array(s),array("string")) : chop = dright(s,1) : end function
@@ -344,7 +344,7 @@ function f2dr(fn, regexp_pattern, delim_string) : call valid_arguments("f2dr",ar
 'e.g. f2d("test.txt", array("^.*=.*$","=")) separate with pattarn check and trim
 'e.g. f2d("test.txt", array("^(.*)=(.*)$",0,1)) separate with regular expression
 '*f2d(file/string, string/array) :: valid_arguments, adic, isfile, e, cerr, ERR_FUNCTION_F2D, ftsread, isstring, divide, dic, rmatch, getmatch, max \(file/path_string, pattern/array("pattern","separator") or array("pattern",key_indicator, value_indicator)))\
-function f2d(fn, a) : dim b, f, o, d : call valid_arguments("f2d",array(fn,a),array("file/string","string/array")) : set d = adic() : if isfile(fn) then : f = fn.apth : else : f = fn : end if : if not e(f) then : cerr("(f2d) '"&f&"' is missing.") : err.raise ERR_FUNCTION_F2D, "'"&f&"' is missing.", "ERR_FUNCTION_F2D" : end if : set o = ftsread(f) : do until o.atendofstream : b = o.readline : select case isstring(a) : case true : if instr(b,a)>0 then : b = divide(b, a) : call dic(d, btrim(b(0)), btrim(b(1))) : end if : case else  : if rmatch(b, a(0)) then : set b = getmatch(b,a(0)) : if ubound(a)>1 then : if b(0).submatches.count > max(cint(a(1)),cint(a(2))) then : call dic(d, btrim(b(0).submatches(cint(a(1)))), btrim(b(0).submatches(cint(a(2))))) : else : cerr("(f2d) '"&b(0)&"' has unmatched submatch section, can't allocate key/value.") : err.raise ERR_FUNCTION_F2D, "'"&b(0)&"' has unmatched submatch section, can't allocate key/value.", "ERR_FUNCTION_F2D" : end if : else : b = divide(b(0).value, a(1)) : call dic(d, btrim(b(0)), btrim(b(1))) : end if : end if : end select : loop : set f2d = d : end function
+function f2d(fn, a) : dim b, f, o, d : call valid_arguments("f2d",array(fn,a),array("file/string","string/array")) : set d = adic() : if isfile(fn) then : f = fn.apth : else : f = fn : end if : if not e(f) then : cerr("(f2d) '"&f&"' is missing.") : err.raise ERR_FUNCTION_F2D, "'"&f&"' is missing.", "ERR_FUNCTION_F2D" : end if : set o = ftsread(f) : do until o.atendofstream : b = o.readline : select case isstring(a) : case true : if instr(b,a)>0 then : b = divide(b, a) : call dic(d, btrim(b(0)), btrim(b(1))) : end if : case else : if rmatch(b, a(0)) then : set b = getmatch(b,a(0)) : if ubound(a)>1 then : if b(0).submatches.count > max(cint(a(1)),cint(a(2))) then : call dic(d, btrim(b(0).submatches(cint(a(1)))), btrim(b(0).submatches(cint(a(2))))) : else : cerr("(f2d) '"&b(0)&"' has unmatched submatch section, can't allocate key/value.") : err.raise ERR_FUNCTION_F2D, "'"&b(0)&"' has unmatched submatch section, can't allocate key/value.", "ERR_FUNCTION_F2D" : end if : else : b = divide(b(0).value, a(1)) : call dic(d, btrim(b(0)), btrim(b(1))) : end if : end if : end select : loop : set f2d = d : end function
 
 'primitive a2s
 '+pa2s(array, string) :: valid_arguments \\
@@ -363,7 +363,7 @@ function d2a(d) : dim b,a : a = array() : call valid_arguments("d2a",array(d),ar
 '+cast(value, string) :: valid_arguments, cerr \if cannot cast value to type, display error message.\
 function cast(v,s) : dim b : call valid_arguments("cast",array(v,s),array("*","string")) : b = lcase(s) : on error resume next : select case b : case "int" : cast = cint(v) : case "integer" : cast = cint(v) : case "str" : cast = cstr(v) : case "string" : cast = cstr(v) : case "date" : cast = cdate(v) : case "time" : cast = cdate(v) : case "datetime" : cast = cdate(v) : case "lng" : cast = clng(v) : case "long" : cast = clng(v) : case "sng" : cast = csng(v) : case "single" : cast = csng(v) : case "dbl" : cast = cdbl(v) : case "double" : cast = cdbl(v) : case "bool" : cast = cbool(v) : case "boolean" : cast = cbool(v) : case "byte" : cast = cbyte(v) : case "cur" : cast = ccur(v) : case "currency" : cast = ccur(v) : case "money" : cast = ccur(v) : case "null" : cast = null : case "empty" : cast = empty : case else : cast = empty : end select : if err.number <> 0 then : cerr("(cast) can't cast to '"&s&"'.") : err.clear : end if : end function
 'cnum(value) :: valid_arguments, rmatch, cerr, ERR_FUNCTION_CNUM \cast NUMER-STRING "^\s*-*\d*(\.\d*)*\s*$" to number.\
-function cnum(o) : call valid_arguments("cnum",array(o),array("value")) : if rmatch(o, "^\s*-*\d*(\.\d*)*\s*$") then : if rmatch(o,"\.") then : cnum = cdbl(o) : else : on error resume next : cnum = cint(o) : if err.number <> 0 then : err.clear : cnum = clng(o) : if err.number <> 0 then : err.clear : cnum = 0 : end if  : end if : end if : else : cerr("(cnum) argument is not number string") : err.raise ERR_FUNCTION_CNUM, "argument is not number string", "ERR_FUNCTION_CNUM" : end if : end function
+function cnum(o) : call valid_arguments("cnum",array(o),array("value")) : if rmatch(o, "^\s*-*\d*(\.\d*)*\s*$") then : if rmatch(o,"\.") then : cnum = cdbl(o) : else : on error resume next : cnum = cint(o) : if err.number <> 0 then : err.clear : cnum = clng(o) : if err.number <> 0 then : err.clear : cnum = 0 : end if : end if : end if : else : cerr("(cnum) argument is not number string") : err.raise ERR_FUNCTION_CNUM, "argument is not number string", "ERR_FUNCTION_CNUM" : end if : end function
 
 '# calculation #
 '+pfloor(numeric, numeric) :: valid_arguments, iif \\
@@ -473,7 +473,7 @@ function b_lsr(n,k) : call valid_arguments("b_lsl",array(n,k),array("numeric","i
 '+b_n2b(numeric) :: valid_arguments, iif, \number to binary string, no operation with over long range.\
 function b_n2b(n) : dim i,s,b : s = "" : call valid_arguments("b_n2b",array(n),array("numeric")) : b = sgn(n)*n : s = iif((sgn(n) = 1),"0","1") : for i=30 to 0 step -1 : if fix(b / 2^i) > 0 then : s = s & "1" : b = b - 2^i : else : s = s & "0" : end if : next : b_n2b = s : end function
 '+b_b2n(string) :: valid_arguments, iif, dleft, rmatch \binary string to number, no operation with not binary string.\
-function b_b2n(b) : dim c,a,s,i : a = 0 : call valid_arguments("b_b2n",array(b),array("string")) : c = right(string(32,"0")&b,32) : s = iif(left(c,1)=0,1,-1) : c = dleft(c,1) : if rmatch(b,"^[01][01]*$")  then : for i=30 to 0 step -1 : a = a+2^i*left(c,1) : c = dleft(c,1) : next : end if : b_b2n = s*a : end function
+function b_b2n(b) : dim c,a,s,i : a = 0 : call valid_arguments("b_b2n",array(b),array("string")) : c = right(string(32,"0")&b,32) : s = iif(left(c,1)=0,1,-1) : c = dleft(c,1) : if rmatch(b,"^[01][01]*$") then : for i=30 to 0 step -1 : a = a+2^i*left(c,1) : c = dleft(c,1) : next : end if : b_b2n = s*a : end function
 '+b_print(string) :: valid_arguments, dright \string has always has 32 digit\
 function b_print(b) : dim i,c,s : i=1 : s = "" : call valid_arguments("b_print", array(b), array("string")) : for each c in s2a(b,1) : s=s&c : if i mod 4 = 0 then : s=s&" " : end if : i = i+1 : next : b_print = dright(s,1) : end function
 
@@ -498,7 +498,7 @@ function errmsg() : errmsg = "[ "&err.number&", "&err.description&", "&err.sourc
 '# path #
 '?isvalidpath(string) :: valid_arguments, dleft, absolutepath, iif, rmatch \is valid path string\
 function isvalidpath(s) : dim b : call valid_arguments("isvalidpath",array(s),array("string")) : b = dleft(absolutepath(s),3) : isvalidpath = iif(rmatch(b,"[:/\*\|\?<>""]"),false,true) : end function
-'?mkdir(string) :: valid_arguments, absolutepath, isvalidpath, cerr, ef, parentfolder, afso \(path_string), absolutepath marumeru  \
+'?mkdir(string) :: valid_arguments, absolutepath, isvalidpath, cerr, ef, parentfolder, afso \(path_string), absolutepath marumeru \
 function mkdir(s) : dim b : call valid_arguments("mkdir",array(s),array("string")) : b = absolutepath(s) : if not isvalidpath(s) then : cerr("(mkdir) found invalid string in '"&b&"', can't create folder.") : mkdir = false : exit function : end if : if not ef(parentfolder(b)) then : call mkdir(parentfolder(b)) : end if : if not ef(b) then : afso.createfolder(b) : end if : mkdir = ef(absolutepath(s)) : end function
 '+basename(value/file/folder) :: valid_arguments, afso \\
 function basename(s) : call valid_arguments("basename",array(s),array("value/file/folder")) : basename = afso.getbasename(s) : end function
@@ -519,7 +519,7 @@ function scriptname() : scriptname = replace(wscript.scriptname,"."&extension(ws
 
 '# random #
 '+rndstr(integer) :: valid_arguments, rand \returns random string using char(48-56, 65-90, 97-122)\
-function rndstr(n) : dim b,i : b = "" : call valid_arguments("rndstr",array(n),array("integer")) : i = n :  : randomize(timer) : do while i>0 : select case rand(1,3) : case 1 : b = b&chr(rand(48,56)) : case 2 : b = b&chr(rand(65,90)) : case else : b = b&chr(rand(97,122)) : end select : i=i-1 : loop : rndstr = b	 : end function
+function rndstr(n) : dim b,i : b = "" : call valid_arguments("rndstr",array(n),array("integer")) : i = n : randomize(timer) : do while i>0 : select case rand(1,3) : case 1 : b = b&chr(rand(48,56)) : case 2 : b = b&chr(rand(65,90)) : case else : b = b&chr(rand(97,122)) : end select : i=i-1 : loop : rndstr = b : end function
 '+rndstrn(integer) :: valid_arguments, rand \returns random string using char(32-126)\
 function rndstrn(n) : dim b,i : b = "" : call valid_arguments("rndstrn",array(n),array("integer")) : i = n : randomize(timer) : do while i>0 : b = b&chr(rand(32,126)) : i = i-1 : loop : rndstrn = b : end function
 '+rndstrm(integer) :: valid_arguments, rand \returns random string using 2nd argument\
@@ -553,7 +553,7 @@ function configure_xml() : dim d, fn,oxml,param,i,a,name, elem, num : num = 0 : 
 'e.g. property_dictionary has {from=>string, to=>array/string, cc=>array/string, bcc=>array/string,
 '     subject=>string, htmlbody=>string, textbody=>string, bodypart.charset=>string, attachment=>array/file/string }
 '*mkmail(dictionary) :: valid_arguments, amail, cerr, iif, env, ed, anet, e, absolutepath, bind \returns mail object with property\
-function mkmail(p) : dim a,b : call valid_arguments("mkmail",array(p),array("dictionary")) : set mkmail = amail() : if isnothing(mkmail) then : cerr("(mkmail) can't create mail with property.") : exit function : end if : mkmail.from = iif(len(p("from"))>0,p("from"),lcase(env("%USERNAME%@%USERDNSDOMAIN%"))) : mkmail.subject = iif(ed(p,"subject"),p("subject"),"send from "&anet.computername&" <"&wscript.scriptfullname&">") : mkmail.htmlbody = p("htmlbody") : mkmail.htmlbody = p("textbody") : mkmail.htmlbody = p("bodypart.charset") : if isarray(p("to")) then : mkmail.to = join(p("to"),",") : else : mkmail.to = p("to") : end if : if isarray(p("cc")) then : mkmail.cc = join(p("cc"),",") : else : mkmail.cc = p("cc") : end if : if isarray(p("bcc")) then : mkmail.bcc = join(p("bcc"),",") : else : mkmail.bcc = p("bcc") : end if : if not isarray(p("attachment")) then : a = array(p("attachment")) : else : a = p("attachment") : end if : for each b in a : if not isempty(b) then : if e(absolutepath(b)) then : mkmail.addattachment(absolutepath(b)) : end if : end if  : next : end function
+function mkmail(p) : dim a,b : call valid_arguments("mkmail",array(p),array("dictionary")) : set mkmail = amail() : if isnothing(mkmail) then : cerr("(mkmail) can't create mail with property.") : exit function : end if : mkmail.from = iif(len(p("from"))>0,p("from"),lcase(env("%USERNAME%@%USERDNSDOMAIN%"))) : mkmail.subject = iif(ed(p,"subject"),p("subject"),"send from "&anet.computername&" <"&wscript.scriptfullname&">") : mkmail.htmlbody = p("htmlbody") : mkmail.htmlbody = p("textbody") : mkmail.htmlbody = p("bodypart.charset") : if isarray(p("to")) then : mkmail.to = join(p("to"),",") : else : mkmail.to = p("to") : end if : if isarray(p("cc")) then : mkmail.cc = join(p("cc"),",") : else : mkmail.cc = p("cc") : end if : if isarray(p("bcc")) then : mkmail.bcc = join(p("bcc"),",") : else : mkmail.bcc = p("bcc") : end if : if not isarray(p("attachment")) then : a = array(p("attachment")) : else : a = p("attachment") : end if : for each b in a : if not isempty(b) then : if e(absolutepath(b)) then : mkmail.addattachment(absolutepath(b)) : end if : end if : next : end function
 'e.g. send_mail("from@mail.addr", "to@mail.addr", "cc@mail.addr", "subject", "mail body", null, "smtpserver", 25, 1000)
 '*send_mail(string,string,string,string,string,string/file/null,string,numeric,numeric) :: valid_arguments, adic, dic, pmailer \for backward compatibility. do not use.\
 function send_mail(addr_from, addr_to, addr_cc, subject, body, attachment, smtpsvr, smtpport, timeout) : dim d : call valid_arguments("send_mail",array(addr_from, addr_to, addr_cc, subject, body, attachment, smtpsvr, smtpport, timeout),array("string", "string", "string", "string", "string", "string/file/null", "string", "numeric", "numeric")) : set d = adic() : call dic(d,"from",""""&addr_from&"""") : call dic(d,"to",addr_to) : call dic(d,"cc",addr_cc) : call dic(d,"subject",subject) : call dic(d,"textbody",body) : if not isnull(attachment) then : if isempty(attachment) then : call dic(d,"attachment","") : else : call dic(d,"attachment",attachment) : end if : end if : set send_mail = pmailer(mkmail(d), 2, smtpsvr, smtpport, timeout, false, 1, "", "") : end function
@@ -604,7 +604,7 @@ function unixtime(d) : call valid_arguments("unixtime",array(d),array("date")) :
 function unix2date(d) : call valid_arguments("unix2date",array(d),array("numeric")) : unix2date = dateadd("s", d, FUNCTIONS_UNIXTIME_BASIS) : end function
 '--
 'e.g. "2 years later" => 2018/02/01 18:18:00
-'+date_natural(s) :: pdate_natural \returns natural-selection date from now()  \
+'+date_natural(s) :: pdate_natural \returns natural-selection date from now() \
 function date_natural(s) : date_natural = pdate_natural(s,now()) : end function
 '+pdate_natural(string, date) :: valid_arguments, rmatch, getsubmatch, date_unit, cerr \if not matched, return empty.\
 function pdate_natural(s,d) : dim m, op : call valid_arguments("pdate_natural",array(s,d),array("string","date")) : if rmatch(s,"^\s*(-*\d\d*)\s*(years*|months*|days*|hours*|min(uite)*s*|sec(ond)*s*)\s*(later|before|after|ago)\s*$") then : set m = getsubmatch(s,"^\s*(-*\d\d*)\s*(years*|months*|days*|hours*|min(uite)*s*|sec(ond)*s*)\s*(later|after|ago|before)\s*$") : set op = date_unit() : pdate_natural = dateadd(op(m(1)),op(m(4)) * m(0),d) : else : cerr("(pdate_natural) '"&s&"' is not matched pattern. (e.g. ""2 years later"")") : end if : end function
@@ -626,7 +626,7 @@ function pynd(s,d) : call valid_arguments("pynd",array(s,d),array("string","date
 function ynd(s) : ynd = pynd(s,now()) : end function
 'primitive yndHMS()
 '+pyndHMS(string, date) :: valid_arguments, adic, dic, preplace \pattern: yyyy/nn/dd/HH/MM/SS \
-function pyndHMS(s,d) : dim b,p : call valid_arguments("pyndHMS",array(s,d),array("string","date")) : b = s : set p = adic() : call dic(p,"yyyy",year(d)) : call dic(p,"yy",right(year(d),2))  : call dic(p,"nn",right("0"&month(d),2)) : call dic(p,"dd",right("0"&day(d),2)) : call dic(p,"HH",right("0"&hour(d),2)) : call dic(p,"MM",right("0"&minute(d),2)) : call dic(p,"SS",right("0"&second(d),2)) : pyndHMS = preplace(s,p) : end function
+function pyndHMS(s,d) : dim b,p : call valid_arguments("pyndHMS",array(s,d),array("string","date")) : b = s : set p = adic() : call dic(p,"yyyy",year(d)) : call dic(p,"yy",right(year(d),2)) : call dic(p,"nn",right("0"&month(d),2)) : call dic(p,"dd",right("0"&day(d),2)) : call dic(p,"HH",right("0"&hour(d),2)) : call dic(p,"MM",right("0"&minute(d),2)) : call dic(p,"SS",right("0"&second(d),2)) : pyndHMS = preplace(s,p) : end function
 '+yndHMS(string) :: pyndHMS \from now(), pattern: yyyy/nn/dd/HH/MM/SS \
 function yndHMS(s) : yndHMS = pyndHMS(s,now()) : end function
 '+preplace(string, dictionary) :: valid_arguments, \(target, pattern_dictionary) \
@@ -681,7 +681,7 @@ function byval_shiftn(a,n) : dim b : call valid_arguments("byval_shiftn",array(a
 function pull(a,n) : dim i : call valid_arguments("pull",array(a,n),array("array","integer/long")) : if ubound(a)<0 then : pull = a : exit function : else : if n>ubound(a) then : pull = empty : exit function : end if : end if : call bind(pull,a(n)) : for i=n to ubound(a)-1 : call swap(a(i),a(i+1)) : next : redim preserve a(ubound(a)-1) : end function
 '--
 '+array_merge(array,array) :: valid_arguments, bind \(1,2), (3,4) -> (1,2,3,4), returns array, not modified original\
-function array_merge(a,b) : dim i,c : c = array() : call valid_arguments("amerge",array(a,b),array("array","array")) : for i=0 to ubound(a) : redim preserve c(ubound(c)+1) : call bind(c(ubound(c)),a(i)) : next : for i=0 to ubound(b) : redim preserve c(ubound(c)+1) : call bind(c(ubound(c)),b(i)) : next : array_merge =  c : end function : 
+function array_merge(a,b) : dim i,c : c = array() : call valid_arguments("amerge",array(a,b),array("array","array")) : for i=0 to ubound(a) : redim preserve c(ubound(c)+1) : call bind(c(ubound(c)),a(i)) : next : for i=0 to ubound(b) : redim preserve c(ubound(c)+1) : call bind(c(ubound(c)),b(i)) : next : array_merge = c : end function : 
 '+array_reverse(array) :: valid_arguments, swap \\
 function array_reverse(a) : dim i,j : call valid_arguments("array_reverse",array(a),array("array")) : if ubound(a)<0 then : array_reverse = a : exit function : end if : i = 0 : j = ubound(a) : do while i<j : call swap(a(i),a(j)) : i=i+1 : j=j-1 : loop : array_reverse = a : end function
 'e.g. array_grab(array(1,2,3,4,5),1,4) => array(2,3,4,5)
@@ -753,7 +753,7 @@ function echo_array(a) : dim i : call valid_arguments("echo_array",array(a),arra
 'echo_array1(array) :: valid_arguments, iif, isvalue, echo \1 liner array echo\
 function echo_array1(a) : dim i, b : b = "" : call valid_arguments("echo_array1",array(a),array("array")) : b = typename(a)&"("&ubound(a)&") (" : for i=0 to ubound(a) : b = b&string(2," ")&"("&i&") = "&typename(a(i))&"("&iif(isvalue(a(i)),a(i),"*")&")" : next : b = b&")" : echo(replace(b,vbnewline,"")) : end function
 'echo_xml(domdocument/ixmldomnodelist) :: valid_arguments, isxml, echo \\
-function echo_xml(x) : dim b  : call valid_arguments("echo_xml",array(x),array("domdocument/ixmldomnodelist")) : if isxml(x) then : b = x.xml : else : b = x.item(0).xml : end if : echo(typename(x)&"(") : echo(string(2," ")&b) : echo(")") : end function
+function echo_xml(x) : dim b : call valid_arguments("echo_xml",array(x),array("domdocument/ixmldomnodelist")) : if isxml(x) then : b = x.xml : else : b = x.item(0).xml : end if : echo(typename(x)&"(") : echo(string(2," ")&b) : echo(")") : end function
 'echo_xml1(domdocument/ixmldomnodelist) :: valid_arguments, isxml, echo \1 liner xml echo\
 function echo_xml1(x) : call valid_arguments("echo_xml1",array(x),array("domdocument/ixmldomnodelist")) : if isxml(x) then : echo(x.xml) : else : echo(x.item(0).xml) : end if : end function
 'echo_dictionary(dictionary) :: valid_arguments, iif, isvalue, echo \\
@@ -802,7 +802,7 @@ function axml() : set axml = createobject("msxml2.domdocument") : end function
 '*amail() :: amessage \alias to amessage\
 function amail() : set amail = amessage() : end function
 '*amessage() :: \\
-function amessage() : on error resume next : set amessage = createobject("cdo.message") : if err.number <> 0 then : cerr("(amessage) can't create cdo.message object.") : stop : set amessage = nothing  : err.clear : end if : end function
+function amessage() : on error resume next : set amessage = createobject("cdo.message") : if err.number <> 0 then : cerr("(amessage) can't create cdo.message object.") : stop : set amessage = nothing : err.clear : end if : end function
 '*aconnsrv(string,string,string,string) :: alocator \(computer,namespace,username,password)\
 function aconnsrv(c,n,u,p) : call valid_arguments("aconnsrv",array(c,n,u,p),array("string","string","string","string")) : set aconnsrv = alocator.connectserver(c,n,u,p) : end function
 '+aan(string) :: valid_arguments, aarg \\
@@ -892,7 +892,7 @@ function flog1(s) : ftsappend(flogname()).writeline(datetime()&vbtab&s) : flog1 
 '+flog2(*) :: ftsappend, flogname, datetime, flog \write to date.log\
 function flog2(s) : ftsappend(flogname()).writeline(datetime()&vbtab&s) : flog2 = len(s) : end function
 '+flog3(*) :: FUNCTION_FLOG_EPID, rndstr, afso, flogname, FUNCTION_FLOG_ROTATE_MAXCOUNT, e, filename, ftsappend \write to scriptname.log rotate by each execution\
-function flog3(s) : dim b : if isempty(FUNCTION_FLOG_EPID) then : call flogepid() : if e(flogname()&"."&FUNCTION_FLOG_ROTATE_MAXCOUNT) then : afso.deletefile flogname()&"."&FUNCTION_FLOG_ROTATE_MAXCOUNT : end if : for b=FUNCTION_FLOG_ROTATE_MAXCOUNT to 1 step -1 : if e(flogname()&"."&b) then : afso.getfile(flogname()&"."&b).name = filename(flogname()&"."&b+1) : end if : next : if e(flogname()) then : afso.getfile(flogname()).name = filename(flogname()&".1") : end if : end if  : ftsappend(flogname()).writeline(datetime()&vbtab&s) : flog3 = len(s) : end function
+function flog3(s) : dim b : if isempty(FUNCTION_FLOG_EPID) then : call flogepid() : if e(flogname()&"."&FUNCTION_FLOG_ROTATE_MAXCOUNT) then : afso.deletefile flogname()&"."&FUNCTION_FLOG_ROTATE_MAXCOUNT : end if : for b=FUNCTION_FLOG_ROTATE_MAXCOUNT to 1 step -1 : if e(flogname()&"."&b) then : afso.getfile(flogname()&"."&b).name = filename(flogname()&"."&b+1) : end if : next : if e(flogname()) then : afso.getfile(flogname()).name = filename(flogname()&".1") : end if : end if : ftsappend(flogname()).writeline(datetime()&vbtab&s) : flog3 = len(s) : end function
 '+fllog4(*) :: e, flogname, ftsread, FUNCTION_FLOG_ROTATE_MAXCOUNT, afso, ynd, ftswrite, filename \write to scriptname.log rotate by each day\
 function flog4(s) : dim b,t : t = now() : if e(flogname()) then : if not left(ftsread(flogname()).readline,8) = year(t)&right("0"&month(t),2)&right("0"&day(t),2) then : if e(flogname()&"."&FUNCTION_FLOG_ROTATE_MAXCOUNT) then : afso.deletefile flogname()&"."&FUNCTION_FLOG_ROTATE_MAXCOUNT : end if : for b=FUNCTION_FLOG_ROTATE_MAXCOUNT to 1 step -1 : if e(flogname()&"."&b) then : afso.getfile(flogname()&"."&b).name = filename(flogname()&"."&b+1) : end if : next : if e(flogname()) then : afso.getfile(flogname()).name = filename(flogname()&".1") : end if : ftswrite(flogname()).writeline(ynd("yyyynndd")) : end if : else : ftswrite(flogname()).writeline(ynd("yyyynndd")) : end if : ftswrite(flogname()).writeline(datetime()&vbtab&s) : flog4 = len(s) : end function
 '+flog5(*) :: e, flogname, afso, FUNCTION_FLOG_ROTATE_MAXSIZE, FUNCTION_FLOG_ROTATE_MAXCOUNT, filename, ftswrite \write to scritpname.log rotate by filesize limit\
@@ -902,7 +902,7 @@ function flog6(s) : dim b : if e(flogname()) then : if not ftsread(flogname()).r
 
 '# file utilities #
 '+fcut(file/string, integer/long, integer/long) :: class:rb, valid_arguments, e, cerr, ERR_FUNCTION_FCUT, ftswrite, ftsread \if end line has EOF only, function returns empty. \
-function fcut(f,sl,el) : dim b, rb, ll, r : r = array() : set rb = new rb : call valid_arguments("fcut",array(f,sl,el),array("file/string","integer/long","integer/long")) :  : if not e(f) then : cerr("(fcut) "&f&" is missing.") : err.raise ERR_FUNCTION_FCUT, "'"&f&"' is missing ", "ERR_FUNCTION_FCUT" : end if :  : ll = ftswrite(f).line  : if not ((sl>0 and sl<=ll) and (el>0 and el<=ll) and sl<=el) then : cerr("(fcut) invalid range ("&sl&" to "&el&")") : err.raise ERR_FUNCTION_FCUT, "invalid range ("&sl&" to "&el&")", "ERR_FUNCTION_FCUT" : end if :  :  : set b = ftsread(f) : do until b.line = sl : b.skipline : loop : rb.size = el-sl+1 : do until b.line = el : rb.value = b.readline : loop : if not b.atendofstream then : rb.value = b.readline : end if : if el=b.line and b.column=1 then : rb.value = empty : end if : fcut = rb.values : end function : '+ftailn(file/string,integer/long) :: valid_arguments, e, cerr, ERR_FUNCTION_FTAILN, ftswrite, echo, fcut \implement with fcut()\
+function fcut(f,sl,el) : dim b, rb, ll, r : r = array() : set rb = new rb : call valid_arguments("fcut",array(f,sl,el),array("file/string","integer/long","integer/long")) : if not e(f) then : cerr("(fcut) "&f&" is missing.") : err.raise ERR_FUNCTION_FCUT, "'"&f&"' is missing ", "ERR_FUNCTION_FCUT" : end if : ll = ftswrite(f).line : if not ((sl>0 and sl<=ll) and (el>0 and el<=ll) and sl<=el) then : cerr("(fcut) invalid range ("&sl&" to "&el&")") : err.raise ERR_FUNCTION_FCUT, "invalid range ("&sl&" to "&el&")", "ERR_FUNCTION_FCUT" : end if : set b = ftsread(f) : do until b.line = sl : b.skipline : loop : rb.size = el-sl+1 : do until b.line = el : rb.value = b.readline : loop : if not b.atendofstream then : rb.value = b.readline : end if : if el=b.line and b.column=1 then : rb.value = empty : end if : fcut = rb.values : end function : '+ftailn(file/string,integer/long) :: valid_arguments, e, cerr, ERR_FUNCTION_FTAILN, ftswrite, echo, fcut \implement with fcut()\
 function ftailn(f,n) : dim b,ll : call valid_arguments("ftailn",array(f,n),array("file/string","integer/long")) : if not e(f) then : cerr("(ftailn) '"&f&"' is missing.") : err.raise ERR_FUNCTION_FTAILN, "'"&f&"' is missing ", "ERR_FUNCTION_FTAILN" : end if : ll = ftswrite(f).line : if n>ll then : echo("(ftailn) '"&n&"' is out of range, fallback to '"&ll&"'") : n = ll : end if : b = fcut(f, ll-n+1, ll) : ftailn = b : end function
 '+fheadn(file/string,integer/long) :: valid_arguments, e, cerr, ERR_FUNCTION_FHEADN, ftswrite, echo, fcut \implement with fcut()\
 function fheadn(f,n) : dim b, ll : call valid_arguments("fheadn",array(f,n),array("file/string","integer/long")) : if not e(f) then : cerr("(fheadn) '"&f&"' is missing.") : err.raise ERR_FUNCTION_FHEADN, "'"&f&"' is missing ", "ERR_FUNCTION_FHEADN" : end if : ll = ftswrite(f).line : if n>ll then : echo("(ftailn) '"&n&"' is out of range, fallback to '"&ll&"'") : n = ll : end if : b = fcut(f, 1, n) : fheadn = b : end function
@@ -923,7 +923,7 @@ function fgrep(f,p) : dim b,buf,r : call valid_arguments("fgrep",array(f,p),arra
 
 '# threads #
 '?th_do(array) :: valid_arguments, echo, push, th_limitcheck, th_done \(cmd_string_array), for use to see sample.txt, function returns exitcode summary. if one of cmds failed, return false.\
-function th_do(cmdlist) : dim b, cmds, flgs, ret : ret=true : call valid_arguments("th_do",array(cmdlist),array("array")) : cmds = array() : echo("(th_do) add jobs ("&ubound(cmdlist)+1&") using pexec(). ") : for each b in cmdlist : if typename(b)=typename("") then : call push(cmds, pexec(b)) : call th_limitcheck(cmds) : end if : next : flgs = th_done(cmds) : for b=0 to ubound(flgs) : echo(""""&cmdlist(b)&""" exit("&flgs(b)&")") : if flgs(b)>0 then  : ret = false : end if : next : th_do = ret : end function
+function th_do(cmdlist) : dim b, cmds, flgs, ret : ret=true : call valid_arguments("th_do",array(cmdlist),array("array")) : cmds = array() : echo("(th_do) add jobs ("&ubound(cmdlist)+1&") using pexec(). ") : for each b in cmdlist : if typename(b)=typename("") then : call push(cmds, pexec(b)) : call th_limitcheck(cmds) : end if : next : flgs = th_done(cmds) : for b=0 to ubound(flgs) : echo(""""&cmdlist(b)&""" exit("&flgs(b)&")") : if flgs(b)>0 then : ret = false : end if : next : th_do = ret : end function
 'th_limitcheck(array) :: valid_arguments,FUNCTION_TH_LIMITCHECK_CPUCOUNT, echo, usleep \(wshexec_array), th_limitcheck() using with th_do()\
 function th_limitcheck(cmds) : dim cmd, s : s = 0 : call valid_arguments("th_limitcheck",array(cmds),array("array")) : if ubound(cmds)+2 <= FUNCTION_TH_LIMITCHECK_CPUCOUNT then : exit function : else : echo("(th_limitcheck) encountered threads limitation("&FUNCTION_TH_LIMITCHECK_CPUCOUNT&")") : do : s = 0 : for each cmd in cmds : if cmd.status = 0 then : s=s+1 : end if : next : usleep(100) : loop until s < FUNCTION_TH_LIMITCHECK_CPUCOUNT : end if : end function : 
 '+th_done(array) :: valid_arguments, echo, usleep, push \(wshexec_array), th_done() using with th_do(), function returns cmd.exitcode array. \
@@ -1203,6 +1203,7 @@ extract オプションにより、依存関係にある関数セットを vbs �
 <example>cscript skel.wsf //job:deptree {FUNCTION_NAME [/extract] | /list}</example>
 </runtime>
 <script language="VBScript" src="lib\dumper.vbs"></script>
+<script language="VBScript" src="lib\push.vbs"></script>
 <script language="VBScript">
 <![CDATA[
 option explicit
@@ -1239,17 +1240,19 @@ do until src.atendofstream
 			call bufdic.add("args", split(replace(rgp.replace(bufmatch(0).submatches(2),"")," ",""),","))
 			call bufdic.add("deps", split(replace(rgp.replace(bufmatch(0).submatches(3),"")," ",""),","))
 			call bufdic.add("description", bufmatch(0).submatches(5))
-			rgp.pattern = "^wm_.*" 'ignore 'wm_' functions
-			if not rgp.test(bufmatch(0).submatches(1)) then
-				call funcs.add(bufmatch(0).submatches(1), src.readline)
-			end if
+			call funcs.add(bufmatch(0).submatches(1), src.readline)
 			call deps.add(bufmatch(0).submatches(1), bufdic)
 		end if
 	end if
 loop
 
+dim a : a = array()
 if wscript.arguments.named.exists("list") then
 	for each buffer in deps
+		call push(a,buffer)
+	next
+	call qsort(a,0,ubound(a))
+	for each buffer in a
 		cstdw buffer&", "
 	next
 	wscript.quit(0)
@@ -1270,6 +1273,17 @@ end if
 cstd(wscript.arguments.unnamed(0)&"() depend on:")
 call tree(0, wscript.arguments.unnamed(0), deps(wscript.arguments.unnamed(0))("deps"))
 
+'show applied to 
+cstd("")
+cstd(wscript.arguments.unnamed(0)&"() applied to:")
+for each buffer in deps
+	for each buf in deps(buffer)("deps")
+		if buf = wscript.arguments.unnamed(0) then
+			cstd " "&buffer&"()"
+		end if
+	next
+next
+
 if wscript.arguments.named.exists("extract") then
 	set fwrite = afso.opentextfile(wscript.arguments.unnamed(0)&".vbs", 2, true)
 	for each buffer in called
@@ -1281,18 +1295,11 @@ if wscript.arguments.named.exists("extract") then
 			fwrite.writeline("'missing "&buffer&"()")
 		end if
 	next
+	cstd("")
+	cstd("write out '"&wscript.arguments.unnamed(0)&"' function and dependencies to "&wscript.arguments.unnamed(0)&".vbs")
 end if
 
-'show applied to 
-cstd("")
-cstd(wscript.arguments.unnamed(0)&"() applied to:")
-for each buffer in deps
-	for each buf in deps(buffer)("deps")
-		if buf = wscript.arguments.unnamed(0) then
-			cstd " "&buffer&"()"
-		end if
-	next
-next
+
 
 
 wscript.quit(0)
