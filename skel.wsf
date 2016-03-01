@@ -27,6 +27,13 @@ option explicit
 '    
 '    # typename
 '    string, boolean, variable, variant() as array, dictionary, OBJECTNAME(*) as object, * as anything
+'
+'    skel option
+'    /debug      : display checked function by valid_arguments()
+'    /config     : set configname, default name defined skelconfname()
+'    /configid   : set config id for read, default is unset
+'    /notypecast : set uncast(string) value to config while read config
+'    
 '*/
 
 'global definitions ====================================
@@ -57,6 +64,8 @@ CONST ERR_FUNCTION_FCAT                      = 32
 CONST ERR_FUNCTION_FCUT                      = 33
 CONST ERR_FUNCTION_FCLEANUP                  = 34
 CONST ERR_FUNCTION_FGREP                     = 35
+CONST ERR_FUNCTION_SKELCONFIGNAME            = 50
+CONST ERR_FUNCTION_SETCONFIG                 = 51
 'for Functions -----------------------------------------
 CONST FUNCTIONS_ARGUMENTSTYPE_CHECK          = true
 CONST FUNCTIONS_UNIXTIME_BASIS               = #1970/01/01 00:00:00#
@@ -108,6 +117,9 @@ dim FUNCTION_DATETIME_TYPENAME               'datetime0 -> 100114165801
                                              'datetime2 -> 2010/11/41 16:58:01
                                              'datetime3 -> 20101141165801
     FUNCTION_DATETIME_TYPENAME               = "datetime1"
+'(skelconf) --------------------------------------------
+dim FUNCTOIN_SKELCONFIGNAME_CONFDIR          'default log directory is created on same path of script.
+    FUNCTOIN_SKELCONFIGNAME_CONFDIR          = wscript.createobject("scripting.filesystemobject").buildpath(wscript.createobject("scripting.filesystemobject").getparentfoldername(wscript.scriptfullname), "conf")
 '(else) ------------------------------------------------
 dim FUNCTION_ECMD_EXT
 		FUNCTION_ECMD_EXT                        = array("",".com",".exe",".bat",".cmd",".vbs",".js",".jar",".wsf")
@@ -138,9 +150,9 @@ function valid_arguments(f, a, b) : dim i,c : valid_arguments = true : dim af,at
 
 '# evaluation #
 '?e(string/empty) :: valid_arguments, afso \(file_path)\
-function e(s) : call valid_arguments("e", array(s), array("string/empty")) : e = afso.fileexists(s) : end function
+function e(s) : call valid_arguments("e", array(s), array("string/empty/file")) : e = afso.fileexists(s) : end function
 '?ef(string/empty) :: valid_arguments, afso \(folder_path)\
-function ef(s) : call valid_arguments("ef", array(s), array("string/empty")) : ef = afso.folderexists(s) : end function
+function ef(s) : call valid_arguments("ef", array(s), array("string/empty/folder")) : ef = afso.folderexists(s) : end function
 '?ea(string/empty) :: valid_arguments, ea \(named_argument)\
 function ea(s) : call valid_arguments("ea", array(s), array("string/empty")) : ea = aarg.named.exists(s) : end function
 '?eau(string/empty) :: valid_arguments, ea, aan \(named_argument) is exists and have length\
@@ -524,111 +536,19 @@ function foreach_rremove(a, s) : dim b, r : r = array() : call valid_arguments("
 function foreach_typename(a) : dim b,r : r = array : call valid_arguments("foreach_typename", array(a), array("array")) : for each b in a : call push(r, typename(b)) : next : foreach_typename = a2s(r, ", ") : end function
 
 '# skelmisc #
-'--たなあげ
-'+typecast(string) :: rmatch, rremove, dictionary
-function typecast(s)
-	if(rmatch(s,"^([Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee])$")) then
-		typecast = cbool(s)
-	else
-		if(rmatch(s,"^"".*""$")) then
-			s = rremove(s,"(^"")|(""$)")
-			if rmatch(s,"^%dic%\{.*\}$") then
-				set typecast = dictionary(rremove(s,"^%dic%"))
-			else
-				if rmatch(s,"^%arr%\(.*\)$") then
-					typecast = split(rremove(s,"^%arr%\(|\)$"),",")
-				else
-					typecast = s
-				end if
-			end if
-		else
-			if(rmatch(s,"^#.*#$")) then
-				typecast = cdate(rremove(s,"(^#)|(#$)"))
-			else
-				if(isnumeric(s)) then
-					typecast = eval(s)
-				else
-					typecast = s
-				end if
-			end if
-		end if
-	end if
-end function
-
-'*configure() :: get_configure, fn_conf \old configure() wrapper\
-function configure() : set configure = get_configure(fn_conf()) : end function
-'+fn_conf() :: iif, eau, aan, basename, e, ef, buildpath \return default configure filename\
-function fn_conf() : dim fn : fn = iif(eau("configure"), aan("configure"), basename(wscript.scriptname)&".configure") : if not e(fn) and ef("conf") then : fn = buildpath("conf", fn) : end if : fn_conf = fn : end function
-'*get_configure(string) :: adic, ea, iecho, e, fcleanup, rmatch, getmatch, rremove, dic, typecast, isvalue, isnothing, FUNCTION_CONFIGURE_SET_EMPTY, eecho 
-function get_configure(fn)
-dim d,b,flg,z
-set d = adic()
-if ea("noconfigure") then
-iecho("noconfigure")
-else
-if e(fn) then
-for each b in fcleanup(fn)
-if(rmatch(b,"(^\s*<(/)*conf(igure)*>$)")) then
-flg = flg + 1
-end if
-if((flg=1) and not rmatch(b,"^\s*(\/\/|'|--|\#).*$")) then
-set b = getmatch(rremove(b,"^\s*(\/\/|'|--|\#).*$"),"^\s*([a-zA-Z""][a-zA-Z0-9_]*)\s*=\s*(.*)\s*$")
-if(b.count > 0) then
-z = b(0).submatches(1)
-if not (rmatch(z,""".*""")) then
-z = trim(rremove(z,"\s*(//|--|').*$|\s*$|\/\*.*\*\/"))
-else
-z = getmatch(z,"("".*"")")(0).submatches(0)
-end if
-if rmatch(z,"("".*"")|(#.*#)") then
-call dic(d,b(0).submatches(0),iif(ea("notypecast"),z,typecast(z)))
-else
-call dic(d,b(0).submatches(0),iif(ea("notypecast"),trim(rremove(z,"#.*$")),typecast(trim(rremove(z,"#.*$")))))
-end if
-end if
-end if
-next
-for each z in d
-if not isvalue(d(z)) then
-if isnothing(d(z)) then
-if FUNCTION_CONFIGURE_SET_EMPTY then
-set d(z) = nothing
-else
-d.remove z
-end if
-end if
-else
-if(len(d(z))=0) then
-if FUNCTION_CONFIGURE_SET_EMPTY then
-d(z) = empty
-else
-d.remove z
-end if
-end if
-end if
-next
-else
-eecho("missing configure file("&fn&"), abort")
-wscript.quit()
-end if
-end if
-call dic(d,"_skelverion",skelversion())
-call dic(d,"_configure",fn)
-call dic(d,"_startdate",datetime1())
-call dic(d,"_logname",flogname())
-call dic(d,"_logtype",FUNCTION_FLOG_TYPENAME)
-call dic(d,"_datetimetype",FUNCTION_DATETIME_TYPENAME)
-set get_configure = d
-end function
-'makeconfig(string) :: e, rreplace, fwrite, iecho \work with configure()\
-function makeconfig(fn) : fn = iif(strcmp(extension(fn),"configure"),fn,fn&".configure") : if not e(fn) then : on error resume next : do : err.clear : call fwrite(fn).writeline("<configure>"&vbnewline&vbnewline&"</configure>") : loop until (err.number=0) : iecho("(makeconfig) => create .configure file:"&fn) : else : iecho("(makeconfig) => already exists ("&fn&")") : end if : wscript.quit : end function
+'+skelconfigname() :: eau, aan, ef, buildpath, FUNCTION_SKELCONFIGNAME_CONFDIR, cerr, ERR_FUNCTION_SKELCONFIGNAME, afso \return default configname. if you want another config, use /config option.\
+function skelconfigname() : dim b : if eau("config") then : b = aan("config") : else : if ef(FUNCTOIN_FLOG_LOGDIR) then : b = buildpath(FUNCTOIN_SKELCONFIGNAME_CONFDIR,scriptname&".conf") : else : b = scriptname&".conf" : end if : end if : if not e(b) then : cerr("(skelconfigname) '"&b&"' is missing.") : err.raise ERR_FUNCTION_SKELCONFIGNAME, "'"&b&"' is missing.", "ERR_FUNCTION_SKELCONFIGNAME" : end if : set skelconfigname = afso.getfile(b) : end function
+'*setconfig(file/string) :: valid_arguments, e, cerr, ERR_FUNCTION_SETCONFIG, adic, iif, ea, aan, fcleanup, rmatch, getsubmatch, dic, skeltypecast, ed, dic, push \read config. see example(conf\skel.configure)\
+function setconfig(c) : dim b,d,v,flg : flg = 0 : dim tag_start, tag_end : call valid_arguments("setconfig",array(c),array("file/string")) : if not e(c) then : cerr("(setconfig) '"&c&"' is missing") : err.raise ERR_FUNCTION_SETCONFIG, "'"&c&"' is missing", "ERR_FUNCTION_SETCONFIG" : end if : set d = adic() : tag_start = "^<conf(igure)*"&iif(ea("configid"),"\s\s*id\s*=\s*""*"&aan("configid")&"""*\s*","")&">" : tag_end = "^</conf(igure)*"&iif(ea("configid"),"\s\s*id\s*=\s*""*"&aan("configid")&"""*\s*","")&">" : for each b in fcleanup(c) : if rmatch(b,tag_start) then : flg=flg+1 : end if : if rmatch(b,tag_end) then : flg=flg+1 : end if : if flg=1 and rmatch(b,"^\s*(""*[a-zA-Z][a-zA-Z0-9\._]*""*)\s*=\s*(.*)\s*$") then : set v = getsubmatch(b,"^\s*(""*[a-zA-Z][a-zA-Z0-9\._]*""*)\s*=\s*(.*)\s*$") : if len(v(0))>0 and len(v(1))>0 then : call dic(d,v(0), iif(ea("notypecast"), v(1), skeltypecast(v(1))) ) : end if : end if : next : if not ed(d,"_readconfigs") then : call dic(d,"_readconfigs",array()) : end if : d("_readconfigs") = push(d("_readconfigs"),c) : set setconfig = d : end function
+'-skeltypecast(string) :: valid_arguments, rmatch, rremove, rmatchi, dictionary \use in setconfig()\
+function skeltypecast(s) : call valid_arguments("skeltypecast",array(s),array("string")) : if rmatch(s,"^"".*""$") then : skeltypecast = rremove(s,"(^"")|(""$)") : else : if rmatchi(s,"true|false") then : skeltypecast = cbool(s) : exit function : end if : if rmatch(s,"^%arr(ay)*%") then : skeltypecast = split(rremove(s,"^%arr(ay)*%\(|\)$"),",") : exit function : end if : if rmatch(s,"^%dic(tionary)*%") then : set skeltypecast = dictionary(rremove(s,"^%dic(tionary)*%")) : exit function : end if : if rmatch(s,"^#[0-9/:][0-9/:]*#$") then : skeltypecast = cdate(rremove(s,"(^#)|(#$)")) : exit function : end if : if isnumeric(s) then : skeltypecast = eval(s) : else : skeltypecast = s : end if : end if : end function : 
+'*skelconfig() :: setconfig, skelconfigname, dic, skelversion, datetime1, flogname, FUNCTION_FLOG_TYPENAME, FUNCTION_DATETIME_TYPENAME \\
+function skelconfig() : dim b : set b = setconfig(skelconfigname()) : call dic(b,"_skelverion",skelversion()) : call dic(b,"_startdate",datetime1()) : call dic(b,"_logname",flogname()) : call dic(b,"_logtype",FUNCTION_FLOG_TYPENAME) : call dic(b,"_datetimetype",FUNCTION_DATETIME_TYPENAME) : set skelconfig = b : end function
 '+skelversion() :: 
 function skelversion() : on error resume next : skelversion = skelv : if err.number <> 0 then : skelversion = "undefined" : err.clear : end if : end function
-'+getepid() :: rndstr, FUNCTION_FLOG_EPID \\
-function getepid() : if isempty(FUNCTION_FLOG_EPID) then : FUNCTION_FLOG_EPID = rndstr(5): end if : getepid = FUNCTION_FLOG_EPID : end function
-'+configure_xml() :: adic, iif, eau, aan, basename, e, ef, buildpath, xml, iecho, eecho, FUNCTION_CONFIGURE_SET_EMPTY, rmatch, dic, cast, push, skelversion, datetime1, flogname, FUNCTION_FLOG_TYPENAME, FUNCTION_DATETIME_TYPENAME
-function configure_xml() : dim d, fn,oxml,param,i,a,name, elem, num : num = 0 : set d = adic() : fn = iif(eau("configure"),aan("configure"),basename(wscript.scriptname)&".configure.xml") : if not e(fn) and ef("conf") then : fn = iif(e(buildpath("conf",basename(wscript.scriptname)&".configure.xml")),buildpath("conf",basename(wscript.scriptname)&".configure.xml"),fn) : end if : set oxml = fxml(fn) : iecho("(configure_xml) => detect "&oxml.documentElement.getElementsByTagName("param").length&" parameters.") : for each param in oxml.documentElement.selectNodes("/configure/param") : set name = param.getElementsByTagName("name") : set elem = param.getElementsByTagName("element") : if name.length<1 then : iecho("(configure_xml) => invalid 'param' ("&num&": undefined 'name'), skipped.") : else : if elem.length<1 then : iecho("(configure_xml) => invalid 'param' ("&num&": undefined 'element'), skipped.") : else : if not elem(0).haschildnodes then : if isnull(elem(0).getattribute("type")) then : if FUNCTION_CONFIGURE_SET_EMPTY then : call dic(d, name(0).text, empty) : else : iecho("(configure_xml) => detect empty 'element' ("&num&": has no 'value'), skipped.") : end if : else : if FUNCTION_CONFIGURE_SET_EMPTY then : if rmatch(elem(0).getattribute("type"),"(dic|dictionary)") then : call dic(d, name(0).text, adic()) : end if : if rmatch(elem(0).getattribute("type"),"(arr|array)") then : call dic(d, name(0).text, array()) : end if : else : iecho("(configure_xml) => detect empty 'element' ("&num&": has no 'value'), skipped.") : end if : end if : else : if isnull(elem(0).getattribute("type")) then : if elem(0).childnodes.length>1 then : iecho("(configure_xml) => invalid 'value' ("&num&": has multiple 'value', only allowed in 'type': array/dictionary), skipped.") : else : call dic(d, name(0).text, cast(elem(0).childnodes(0).text, elem(0).childnodes(0).getattribute("type"))) : end if : else : if rmatch(elem(0).getattribute("type"),"(arr|array)") then : a = array() : for i=0 to elem(0).childnodes.length-1 : if rmatch(elem(0).childnodes(i).getattribute("type"),"(arr|array|dic|dictionary)") then : iecho("(configure_xml) => invalid 'value,type' ("&num&","&i&": not allowed '"&elem(0).childnodes(i).getattribute("type")&"' yet), skipped.") : else : call push(a, cast(elem(0).childnodes(i).text, elem(0).childnodes(i).getattribute("type"))) : end if : next : call dic(d, name(0).text, a) : end if : if rmatch(elem(0).getattribute("type"),"(dic|dictionary)") then : set a = adic() : for i=0 to elem(0).childnodes.length-1 : if rmatch(elem(0).childnodes(i).getattribute("type"),"(arr|array|dic|dictionary)") then : iecho("(configure_xml) => invalid 'value,type' ("&num&","&i&": not allowed '"&elem(0).childnodes(i).getattribute("type")&"' yet), skipped.") : else : if isnull(elem(0).childnodes(i).getattribute("key")) then : iecho("(configure_xml) => invalid value ("&num&","&i&": not allowed null 'key'), skipped.") : else : call dic(a, elem(0).childnodes(i).getattribute("key"), cast(elem(0).childnodes(i).text, elem(0).childnodes(i).getattribute("type"))) : end if : end if : next : call dic(d, name(0).text, a) : end if : if not rmatch(elem(0).getattribute("type"),"(dic|dictionary|arr|array)") then : iecho("(configure_xml) => not support '"&elem(0).getattribute("type")&"' has multiple 'value', skipped.") : end if : end if : end if : end if : end if : num = num+1 : next : call dic(d,"_skelverion",skelversion()) : call dic(d,"_configure",fn) : call dic(d,"_startdate",datetime1()) : call dic(d,"_logname",flogname()) : call dic(d,"_logtype",FUNCTION_FLOG_TYPENAME) : call dic(d,"_datetimetype",FUNCTION_DATETIME_TYPENAME) : set configure_xml = d : end function : 
-
+'--
+'+configure_xml() :: adic, iif, eau, aan, basename, e, ef, buildpath, xml, echo,cerr, FUNCTION_CONFIGURE_SET_EMPTY, rmatch, dic, cast, push, skelversion, datetime1, flogname, FUNCTION_FLOG_TYPENAME, FUNCTION_DATETIME_TYPENAME
+function configure_xml() : dim d, fn,oxml,param,i,a,name, elem, num : num = 0 : set d = adic() : fn = iif(eau("config"),aan("config"),basename(wscript.scriptname)&".config.xml") : if not e(fn) and ef("conf") then : fn = iif(e(buildpath("conf",basename(wscript.scriptname)&".config.xml")),buildpath("conf",basename(wscript.scriptname)&".config.xml"),fn) : end if : set oxml = fxml(fn) : echo("(configure_xml) detect "&oxml.documentElement.getElementsByTagName("param").length&" parameters.") : for each param in oxml.documentElement.selectNodes("/configure/param") : set name = param.getElementsByTagName("name") : set elem = param.getElementsByTagName("element") : if name.length<1 then : cerr("(configure_xml) invalid 'param' ("&num&": undefined 'name'), skipped.") : else : if elem.length<1 then : cerr("(configure_xml) invalid 'param' ("&num&": undefined 'element'), skipped.") : else : if not elem(0).haschildnodes then : if isnull(elem(0).getattribute("type")) then : if FUNCTION_CONFIGURE_SET_EMPTY then : call dic(d, name(0).text, empty) : else : cerr("(configure_xml) detect empty 'element' ("&num&": has no 'value'), skipped.") : end if : else : if FUNCTION_CONFIGURE_SET_EMPTY then : if rmatch(elem(0).getattribute("type"),"(dic|dictionary)") then : call dic(d, name(0).text, adic()) : end if : if rmatch(elem(0).getattribute("type"),"(arr|array)") then : call dic(d, name(0).text, array()) : end if : else : cerr("(configure_xml) detect empty 'element' ("&num&": has no 'value'), skipped.") : end if : end if : else : if isnull(elem(0).getattribute("type")) then : if elem(0).childnodes.length>1 then : cerr("(configure_xml) invalid 'value' ("&num&": has multiple 'value', only allowed in 'type': array/dictionary), skipped.") : else : call dic(d, name(0).text, cast(elem(0).childnodes(0).text, elem(0).childnodes(0).getattribute("type"))) : end if : else : if rmatch(elem(0).getattribute("type"),"(arr|array)") then : a = array() : for i=0 to elem(0).childnodes.length-1 : if rmatch(elem(0).childnodes(i).getattribute("type"),"(arr|array|dic|dictionary)") then : cerr("(configure_xml) invalid 'value,type' ("&num&","&i&": not allowed '"&elem(0).childnodes(i).getattribute("type")&"' yet), skipped.") : else : call push(a, cast(elem(0).childnodes(i).text, elem(0).childnodes(i).getattribute("type"))) : end if : next : call dic(d, name(0).text, a) : end if : if rmatch(elem(0).getattribute("type"),"(dic|dictionary)") then : set a = adic() : for i=0 to elem(0).childnodes.length-1 : if rmatch(elem(0).childnodes(i).getattribute("type"),"(arr|array|dic|dictionary)") then : cerr("(configure_xml) invalid 'value,type' ("&num&","&i&": not allowed '"&elem(0).childnodes(i).getattribute("type")&"' yet), skipped.") : else : if isnull(elem(0).childnodes(i).getattribute("key")) then : cerr("(configure_xml) invalid value ("&num&","&i&": not allowed null 'key'), skipped.") : else : call dic(a, elem(0).childnodes(i).getattribute("key"), cast(elem(0).childnodes(i).text, elem(0).childnodes(i).getattribute("type"))) : end if : end if : next : call dic(d, name(0).text, a) : end if : if not rmatch(elem(0).getattribute("type"),"(dic|dictionary|arr|array)") then : cerr("(configure_xml) not support '"&elem(0).getattribute("type")&"' has multiple 'value', skipped.") : end if : end if : end if : end if : end if : num = num+1 : next : call dic(d,"_skelverion",skelversion()) : call dic(d,"_configure",fn) : call dic(d,"_startdate",datetime1()) : call dic(d,"_logname",flogname()) : call dic(d,"_logtype",FUNCTION_FLOG_TYPENAME) : call dic(d,"_datetimetype",FUNCTION_DATETIME_TYPENAME) : set configure_xml = d : end function : 
 
 'e.g. property_dictionary has {from=>string, to=>array/string, cc=>array/string, bcc=>array/string,
 '     subject=>string, htmlbody=>string, textbody=>string, bodypart.charset=>string, attachment=>array/file/string }
@@ -727,8 +647,8 @@ function byval_dicmerge(d,m) : dim b,c,k : call valid_arguments("byval_dicmerge"
 '?dicunite(dictionary, dictionary) :: pdicmerge \(merged, source) dicmerge returns true. affect to original dictionary. if found same key, do nothing.\
 function dicunite(byref d,m) : dicunite = pdicmerge(d,m,false) : end function
 'e.g. dictionary("{1=>2, 2=>true, 3=>"str", }") => dictionary object
-'*dictionary(string) :: valid_arguments, adic, rmatch, rremove, dic, btrim, typecast, FUNCTION_DICTIONARY_FORMAT \\
-function dictionary(s) : dim a,b,d  : call valid_arguments("dictionary",array(s),array("string")) : set d = adic() : if rmatch(s,FUNCTION_DICTIONARY_FORMAT) then : a = split(rremove(s,"^{|}$"),",") : for each b in a : call dic(d,btrim(split(b,"=>")(0)),typecast(trim(split(b,"=>")(1)))) : next : end if : set dictionary = d : end function
+'*dictionary(string) :: valid_arguments, adic, rmatch, rremove, dic, btrim, skeltypecast, FUNCTION_DICTIONARY_FORMAT \\
+function dictionary(s) : dim a,b,d : call valid_arguments("dictionary",array(s),array("string")) : set d = adic() : if rmatch(s,FUNCTION_DICTIONARY_FORMAT) then : a = split(rremove(s,"^{|}$"),",") : for each b in a : call dic(d,btrim(split(b,"=>")(0)),skeltypecast(trim(split(b,"=>")(1)))) : next : end if : set dictionary = d : end function
 
 '# array #
 'e.g. shift <-  array() -> pop
@@ -846,7 +766,8 @@ function echo_matches(m) : dim i,j : call valid_arguments("echo_matches",array(m
 function echo_matches1(m) : dim i,j,b : call valid_arguments("echo_matches1",array(m),array("imatchcollection2/isubmatches")) : if ismatch(m) then : b = typename(m)&"("&m.count&") (" : for i=0 to m.count-1 : b = b&string(2," ")&typename(m(i))&"("&i&") ( (firstindex, length, value) = ("&m(i).firstindex&", "&m(i).length&", "&typename(m(i).value)&"("&m(i).value&")) "&iif(m(i).submatches.count>0,"",")") : if m(i).submatches.count > 0 then : for j=0 to m(i).submatches.count-1 : b = b&string(4," ")&typename(m(i).submatches)&"("&m(i).submatches.count&") ( ("&j&") = ("&m(i).submatches(j)&") )" : next : b = b&string(2," ")&")" : end if : next : b = b&")" : echo(b) : else : b = typename(m)&"("&m.count&") (" : for i=0 to m.count-1 : b = b&string(2," ")&"("&i&") = "&typename(m(i))&"("&m(i)&")" : next : b = b&")" : echo(b) : end if : end function
 '--
 'dumper(*) :: isvalue, echo, FUNCTION_DUMPER_LABEL, FUNCTION_DUMPER_LEVEL \dump variable\
-function dumper(v) : dim b,c : select case (isvalue(v) or isempty(v)) : case true : echo(FUNCTION_DUMPER_LABEL&typename(v)&"("&v&")") : case else : select case typename(v) : case "Variant()" : echo(FUNCTION_DUMPER_LABEL&typename(v)&"("&ubound(v)&") (") : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL+1 : for b=0 to ubound(v) : FUNCTION_DUMPER_LABEL = "(dumper) "&string(FUNCTION_DUMPER_LEVEL,"  ")&"("&b&") = " : call dumper(v(b)) : next : FUNCTION_DUMPER_LABEL = "(dumper) " : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL-1 : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&")") : case "Dictionary" : echo(FUNCTION_DUMPER_LABEL&typename(v)&"("&v.count&") {") : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL+1 : for each b in v : FUNCTION_DUMPER_LABEL = "(dumper) "&string(FUNCTION_DUMPER_LEVEL,"  ")&typename(b)&"("&b&") => " : call dumper(v(b)) : next : FUNCTION_DUMPER_LABEL = "(dumper) " : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL-1 : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"}") : case "IMatchCollection2" : echo(FUNCTION_DUMPER_LABEL&typename(v)&" {") : FUNCTION_DUMPER_LABEL = "(dumper) " : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL+1 : if v.count>0 then : for b=0 to v.count-1 : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&typename(v(b))&"("&v.count&") (") : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL+1 : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"("&b&") = (") : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL+1 : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(firstindex) = ("&v(b).firstindex&")") : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(length) = ("&v(b).length&")") : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(value) = "&typename(v(b).value)&"("&v(b).value&")") : if v(b).submatches.count>0 then : call dumper(v(b).submatches) : end if : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL-1 : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&")") : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL-1 : next : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&")") : end if : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL-1 : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"}") : case "ISubMatches" : echo("(dumper) "&string(FUNCTION_DUMPER_LEVEL,"  ")&typename(v)&" (") : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL+1 : for b=0 to v.count-1 : echo("(dumper) "&string(FUNCTION_DUMPER_LEVEL,"  ")&"("&b&") = "&typename(v(b))&"("&v(b)&")") : next : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL-1 : echo("(dumper) "&string(FUNCTION_DUMPER_LEVEL,"  ")&")") : case "IMessage" : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&typename(v)&" (") : FUNCTION_DUMPER_LABEL = "(dumper) " : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL+1 : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(from) = ("&v.from&")") : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(to) = ("&v.to&")") : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(cc) = ("&v.cc&")") : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(bcc) = ("&v.bcc&")") : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(subject) = ("&v.subject&")") : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(htmlbody) = ("&v.htmlbody&")") : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(textbody) = ("&v.textbody&")") : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(bodypart.charset) = ("&v.bodypart.charset&")") : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(attachments)("&v.attachments.count&") = {") : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL+1 : for each b in v.attachments : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(filename) = "&typename(b.filename)&"("&b.filename&")") : next : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL-1 : FUNCTION_DUMPER_LABEL = "(dumper) " : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"}") : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL-1 : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&")") : case "DOMDocument" : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&typename(v)&" {") : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL+1 : if v.haschildnodes then : FUNCTION_DUMPER_LABEL = "(dumper) " : call dumper(v.childnodes) : end if : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL-1 : FUNCTION_DUMPER_LABEL = "(dumper) " : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"}") : case "IXMLDOMNodeList" : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&typename(v)&"("&v.length&") {") : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL+1 : for each b in v : call dumper(b) : next : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL-1 : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"}") : case "IXMLDOMElement" : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&typename(v)&"("&v.nodename&" -> "&v.nodevalue&") {") : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL+1 : for b=0 to v.childnodes.length-1 : call dumper(v.childnodes(b)) : next : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL-1 : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"}") : case "IXMLDOMText" : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&typename(v)&"("&v.nodename&" -> "&v.nodevalue&")") : case "IXMLDOMSelection" : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&typename(v)&"("&v.length&") {") : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL+1 : for each b in v : FUNCTION_DUMPER_LABEL = "(dumper) " : call dumper(b) : next : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL-1 : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"}") : case else : select case (isnothing(v) or isnull(v)) : case true : echo(FUNCTION_DUMPER_LABEL&typename(v)&"()") : case else : echo(FUNCTION_DUMPER_LABEL&typename(v)&"(*)") : end select : end select : end select : end function : 
+function dumper(v) : dim b,c : select case (isvalue(v) or isempty(v)) : case true : echo(FUNCTION_DUMPER_LABEL&typename(v)&"("&v&")") : case else : select case typename(v) : case "Variant()" : echo(FUNCTION_DUMPER_LABEL&typename(v)&"("&ubound(v)&") (") : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL+1 : for b=0 to ubound(v) : FUNCTION_DUMPER_LABEL = "(dumper) "&string(FUNCTION_DUMPER_LEVEL,"  ")&"("&b&") = " : call dumper(v(b)) : next : FUNCTION_DUMPER_LABEL = "(dumper) " : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL-1 : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&")") : case "Dictionary" : echo(FUNCTION_DUMPER_LABEL&typename(v)&"("&v.count&") {") : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL+1 : for each b in v : FUNCTION_DUMPER_LABEL = "(dumper) "&string(FUNCTION_DUMPER_LEVEL,"  ")&typename(b)&"("&b&") => " : call dumper(v(b)) : next : FUNCTION_DUMPER_LABEL = "(dumper) " : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL-1 : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"}") : case "IMatchCollection2" : echo(FUNCTION_DUMPER_LABEL&typename(v)&" {") : FUNCTION_DUMPER_LABEL = "(dumper) " : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL+1 : if v.count>0 then : for b=0 to v.count-1 : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&typename(v(b))&"("&v.count&") (") : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL+1 : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"("&b&") = (") : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL+1 : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(firstindex) = ("&v(b).firstindex&")") : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(length) = ("&v(b).length&")") : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(value) = "&typename(v(b).value)&"("&v(b).value&")") : if v(b).submatches.count>0 then : call dumper(v(b).submatches) : end if : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL-1 : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&")") : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL-1 : next : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&")") : end if : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL-1 : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"}") : case "ISubMatches" : echo("(dumper) "&string(FUNCTION_DUMPER_LEVEL,"  ")&typename(v)&" (") : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL+1 : for b=0 to v.count-1 : echo("(dumper) "&string(FUNCTION_DUMPER_LEVEL,"  ")&"("&b&") = "&typename(v(b))&"("&v(b)&")") : next : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL-1 : echo("(dumper) "&string(FUNCTION_DUMPER_LEVEL,"  ")&")") : case "IMessage" : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&typename(v)&" (") : FUNCTION_DUMPER_LABEL = "(dumper) " : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL+1 : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(from) = ("&v.from&")") : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(to) = ("&v.to&")") : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(cc) = ("&v.cc&")") : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(bcc) = ("&v.bcc&")") : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(subject) = ("&v.subject&")") : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(htmlbody) = ("&v.htmlbody&")") : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(textbody) = ("&v.textbody&")") : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(bodypart.charset) = ("&v.bodypart.charset&")") : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(attachments)("&v.attachments.count&") = {") : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL+1 : for each b in v.attachments : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"(filename) = "&typename(b.filename)&"("&b.filename&")") : next : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL-1 : FUNCTION_DUMPER_LABEL = "(dumper) " : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"}") : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL-1 : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&")") : case "DOMDocument" : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&typename(v)&" {") : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL+1 : if v.haschildnodes then : FUNCTION_DUMPER_LABEL = "(dumper) " : call dumper(v.childnodes) : end if : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL-1 : FUNCTION_DUMPER_LABEL = "(dumper) " : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"}") : case "IXMLDOMNodeList" : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&typename(v)&"("&v.length&") {") : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL+1 : for each b in v : call dumper(b) : next : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL-1 : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"}") : case "IXMLDOMElement" : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&typename(v)&"("&v.nodename&" -> "&v.nodevalue&") {") : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL+1 : for b=0 to v.childnodes.length-1 : call dumper(v.childnodes(b)) : next : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL-1 : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"}") : case "IXMLDOMText" : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&typename(v)&"("&v.nodename&" -> "&v.nodevalue&")") : case "IXMLDOMSelection" : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&typename(v)&"("&v.length&") {") : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL+1 : for each b in v : FUNCTION_DUMPER_LABEL = "(dumper) " : call dumper(b) : next : FUNCTION_DUMPER_LEVEL = FUNCTION_DUMPER_LEVEL-1 : echo(FUNCTION_DUMPER_LABEL&string(FUNCTION_DUMPER_LEVEL,"  ")&"}") : case "File" : echo(FUNCTION_DUMPER_LABEL&typename(v)&"("&v.path&")") : case "Folder" : echo(FUNCTION_DUMPER_LABEL&typename(v)&"("&v.path&")") : case else : select case (isnothing(v) or isnull(v)) : case true : echo(FUNCTION_DUMPER_LABEL&typename(v)&"()") : case else : echo(FUNCTION_DUMPER_LABEL&typename(v)&"(*)") : end select : end select : end select : end function
+
 '--
 '+cout(string) :: \this function is primitive so do not use user functions in this.\
 function cout(s) : on error resume next : cout = len(s) : wscript.stdout.writeline(s) : err.clear : end function
@@ -980,9 +901,8 @@ function flog5(s) : dim b : if e(flogname()) then : if afso.getfile(flogname()).
 function flog6(s) : dim b : if e(flogname()) then : if not ftsread(flogname()).readline = yndHMS(FUNCTION_FLOG_ROTATE_PATTERN) then : if e(flogname()&"."&FUNCTION_FLOG_ROTATE_MAXCOUNT) then : afso.deletefile flogname()&"."&FUNCTION_FLOG_ROTATE_MAXCOUNT : end if : for b=FUNCTION_FLOG_ROTATE_MAXCOUNT to 1 step -1 : if e(flogname()&"."&b) then : afso.getfile(flogname()&"."&b).name = filename(flogname()&"."&b+1) : end if : next : if e(flogname()) then : afso.getfile(flogname()).name = filename(flogname()&".1") : end if : ftswrite(flogname()).writeline(yndHMS(FUNCTION_FLOG_ROTATE_PATTERN)) : end if : else : ftswrite(flogname()).writeline(yndHMS(FUNCTION_FLOG_ROTATE_PATTERN)) : end if : ftswrite(flogname()).writeline(datetime()&vbtab&s) : flog6 = len(s) : end function
 
 '# file utilities #
-'+fcut(file/string, integer/long, integer/long) :: class:ring_buffer, valid_arguments, e, cerr, ERR_FUNCTION_FCUT, ftswrite, ftsread \if end line has EOF only, function returns empty. \
-function fcut(f,sl,el) : dim b, rb, ll, r : r = array() : set rb = new ring_buffer : call valid_arguments("fcut",array(f,sl,el),array("file/string","integer/long","integer/long")) : if not e(f) then : cerr("(fcut) "&f&" is missing.") : err.raise ERR_FUNCTION_FCUT, "'"&f&"' is missing ", "ERR_FUNCTION_FCUT" : end if : ll = ftswrite(f).line  : if not ((sl>0 and sl<=ll) and (el>0 and el<=ll) and sl<=el) then : cerr("(fcut) invalid range ("&sl&" to "&el&")") : err.raise ERR_FUNCTION_FCUT, "invalid range ("&sl&" to "&el&")", "ERR_FUNCTION_FCUT" : end if : set b = ftsread(f) : do until b.line = sl : b.skipline : loop : rb.size = el-sl : do until b.line = el : rb.value = b.readline : loop : if not b.atendofstream then : rb.value = b.readline : end if : if el=b.line and b.column=1 then : rb.value = empty : end if : fcut = rb.values : end function
-'+ftailn(file/string,integer/long) :: valid_arguments, e, cerr, ERR_FUNCTION_FTAILN, ftswrite, echo, fcut \implement with fcut()\
+'+fcut(file/string, integer/long, integer/long) :: class:rb, valid_arguments, e, cerr, ERR_FUNCTION_FCUT, ftswrite, ftsread \if end line has EOF only, function returns empty. \
+function fcut(f,sl,el) : dim b, rb, ll, r : r = array() : set rb = new rb : call valid_arguments("fcut",array(f,sl,el),array("file/string","integer/long","integer/long")) :  : if not e(f) then : cerr("(fcut) "&f&" is missing.") : err.raise ERR_FUNCTION_FCUT, "'"&f&"' is missing ", "ERR_FUNCTION_FCUT" : end if :  : ll = ftswrite(f).line  : if not ((sl>0 and sl<=ll) and (el>0 and el<=ll) and sl<=el) then : cerr("(fcut) invalid range ("&sl&" to "&el&")") : err.raise ERR_FUNCTION_FCUT, "invalid range ("&sl&" to "&el&")", "ERR_FUNCTION_FCUT" : end if :  :  : set b = ftsread(f) : do until b.line = sl : b.skipline : loop : rb.size = el-sl+1 : do until b.line = el : rb.value = b.readline : loop : if not b.atendofstream then : rb.value = b.readline : end if : if el=b.line and b.column=1 then : rb.value = empty : end if : fcut = rb.values : end function : '+ftailn(file/string,integer/long) :: valid_arguments, e, cerr, ERR_FUNCTION_FTAILN, ftswrite, echo, fcut \implement with fcut()\
 function ftailn(f,n) : dim b,ll : call valid_arguments("ftailn",array(f,n),array("file/string","integer/long")) : if not e(f) then : cerr("(ftailn) '"&f&"' is missing.") : err.raise ERR_FUNCTION_FTAILN, "'"&f&"' is missing ", "ERR_FUNCTION_FTAILN" : end if : ll = ftswrite(f).line : if n>ll then : echo("(ftailn) '"&n&"' is out of range, fallback to '"&ll&"'") : n = ll : end if : b = fcut(f, ll-n+1, ll) : ftailn = b : end function
 '+fheadn(file/string,integer/long) :: valid_arguments, e, cerr, ERR_FUNCTION_FHEADN, ftswrite, echo, fcut \implement with fcut()\
 function fheadn(f,n) : dim b, ll : call valid_arguments("fheadn",array(f,n),array("file/string","integer/long")) : if not e(f) then : cerr("(fheadn) '"&f&"' is missing.") : err.raise ERR_FUNCTION_FHEADN, "'"&f&"' is missing ", "ERR_FUNCTION_FHEADN" : end if : ll = ftswrite(f).line : if n>ll then : echo("(ftailn) '"&n&"' is out of range, fallback to '"&ll&"'") : n = ll : end if : b = fcut(f, 1, n) : fheadn = b : end function
@@ -1015,170 +935,97 @@ function xml(s) : dim a : set a = axml() : call valid_arguments("xml",array(s),a
 '*fxml(string/file) :: valid_arguments, isfile, e, cerr, ERR_FUNCTION_FXML \\
 function fxml(fn) : dim a,f : set a = axml() : call valid_arguments("fxml",array(fn),array("string/file")) : if isfile(fn) then : f = fn.path : else : f = fn : end if : if not e(f) then : cerr("(fxml) not exists file '"&f&"'") : err.raise ERR_FUNCTION_FXML, "not exists file '"&f&"'","ERR_FUNCTION_FXML"  : end if : if a.load(f) then : set fxml = a : else : cerr("(fxml) '"&f&"' is not xml document.") : err.raise ERR_FUNCTION_FXML, "'"&f&"' is not xml document.","ERR_FUNCTION_FXML"  : end if : end function : 
 
-'--ここまでやった
-
-'-- #WMI class
-'class wm for WMI. functions have wm_ prefix is virtual function for //job:deptree.
+'# class #
+'wm for wmi
 class wm
-'variables ------------------------------------------------
 private w
-'functions - embedded -------------------------------------
 'wm_class_initialize() :: adic, dic, wm_set_computer, iecho
-''class_initialize() :: adic, dic, set_computer, iecho
 private sub class_initialize : set w = adic() : call dic(w,"islocalusewmi",isusewmi()) : if w("islocalusewmi") then : set_computer(anet.computername) : else : iecho("(wm.class_initialize) => this computer cannot use wmi.") : end if : end sub
 'wm_class_terminate() :: iecho, CLASS_WM_TERMINATE_WAITTIME
-''class_terminate() :: iecho, CLASS_WM_TERMINATE_WAITTIME
 private sub class_terminate : set w = nothing : iecho("(wm.class_terminate) => terminating wm...") : wscript.sleep CLASS_WM_TERMINATE_WAITTIME : end sub
-'functions - computer --------------------------------------
 'wm_set_computer() :: dic, wm_isvalidcomputer, wm_isvalidclass, ed
-''set_computer() :: dic, isvalidcomputer, isvalidclass, ed
 private sub set_computer(t) : call dic(w,"computer",t) : call dic(w,"isvalidcomputer",isvalidcomputer()) : if ed(w,"class") then : call dic(w,"isvalidclass",isvalidclass()) : end if : end sub
 'wm_computer() :: isstring, wm_set_computer, iecho
-''setter computer :: isstring, set_computer, iecho
 public property let computer(t) : if isstring(t) then : set_computer(t) : else : iecho("(wm.computer) => wants (string)") : end if : end property
-''getter computer ::  
+'wm_get_computer() ::  
 public property get computer : computer = w("computer") : end property
 '?wm_isvalidcomputer() :: dic, isping, 
-''?isvalidcomputer() :: dic, isping, 
 private function isvalidcomputer() : call dic(w,"isping",isping(w("computer"))) : if w("isping") then : on error resume next : call dic(w,"srvex",getobject("winmgmts:\\"&w("computer")&"\root\cimv2")) : isvalidcomputer = not (err.number <> 0) : err.clear : else : isvalidcomputer = false : end if : if not isvalidcomputer then : set w("srvex") = nothing : end if : end function
-'functions - class -----------------------------------------
 'wm_set_class() :: dic, wm_isvalidclass
-''set_class() :: dic, isvalidclass
 private sub set_class(c) : call dic(w,"class",c) : call dic(w,"isvalidclass",isvalidclass()) : end sub
-'wm_class() :: isstring, wm_set_class, iecho, dic, wm_isvalidclass
-''class() :: isstring, set_class, iecho, dic, isvalidclass
+'wm_let_class() :: isstring, wm_set_class, iecho, dic, wm_isvalidclass
 public property let [class](c) : if isstring(c) then : set_class(c) : else : iecho("(wm.class) => wants (string)") : end if : call dic(w,"isvalidclass",isvalidclass()) : end property
 '?wm_isvalidclass() :: dic, 
-''?isvalidclass() :: dic, 
 private function isvalidclass() : if w("isping") then : on error resume next : call dic(w,"objex",getobject("winmgmts:\\"&w("computer")&"\root\cimv2:"&w("class"))) : call dic(w,"objset",getobject("winmgmts:\\"&w("computer")&"\root\cimv2").instancesof(w("class"))) : isvalidclass = not (err.number <> 0) : err.clear : else : isvalidclass = false : end if : if not isvalidclass then : set w("objectex") = nothing : set w("objectset") = nothing : end if : end function
-'functions - execquery -------------------------------------
 '*wm_execquery() :: iecho
-''*execquery() :: iecho
 public function execquery() : if w("islocalusewmi") and w("isvalidcomputer") and w("isvalidclass") and w("isping") then : set execquery = w("srvex").execquery("select * from "&w("class")) : else : iecho("(wm.execquery) => unfilled condition. check computer/class name or pinging to host") : end if : end function
 '*wm_execquery2d() :: adic, dic, iecho
-''*execquery2d() :: adic, dic, iecho
 public function execquery2d() : if w("islocalusewmi") and w("isvalidcomputer") and w("isvalidclass") and w("isping") then : dim d,a,b,c,count : count = 0 : set d = adic() : for each a in w("srvex").execquery("select * from "&w("class")) : set c = adic() : for each b in a.properties_ : call dic(c, b.name, b.value) : next : call dic(d,count,c) : count = count + 1 : next : set execquery2d = d : else : iecho("(wm.execquery2d) => unfilled condition. check computer/class name or pinging to host") : end if : if not isobject(execquery2d) then : set execquery2d = adic() : end if : end function
 '*wm_q() :: wm_execquery
-''*q() :: execquery
 public function q() : set q = execquery() : end function
 '*wm_q2d() :: wm_execquery2d
-''*q2d() :: execquery2d
 public function q2d() : set q2d = execquery2d() : end function
 '*wm_filteredquery(string) :: isstring, wm_hasproperty, eecho, iecho
-''*filteredquery(string) :: isstring, hasproperty, eecho, iecho
 public function filteredquery(f) : if w("islocalusewmi") and w("isvalidcomputer") and w("isvalidclass") and w("isping") then : if isstring(f) then : dim q : set q = w("srvex").execquery("select "&f&" from "&w("class")) : if not hasproperty(f) then : eechon("(wm.filteredquery) => return_object has no such property('"&f&"') on class('"&w("class")&"')") : set filteredquery = nothing : else : set filteredquery = q : end if : else : iecho("(wm.filteredquery) => wants (string)") : end if : else : iecho("(wm.filteredquery) => unfilled condition. check computer/class name or pinging to host") : end if : end function
 '*wm_filteredquery2d(string) :: isstring, adic, wm_hasproperty
-''*filteredquery2d(string) :: isstring, adic, hasproperty
 public function filteredquery2d(f) : if w("islocalusewmi") and w("isvalidcomputer") and w("isvalidclass") and w("isping") then : if isstring(f) then : dim d,a,b,c,count,q : count = 0 : set d = adic() : set q = w("srvex").execquery("select "&f&" from "&w("class")) : if not hasproperty(f) then : eechon("(wm.filteredquery2d) => return_object has no such property('"&f&"') on class('"&w("class")&"')") : set filteredquery2d = nothing : else : for each a in q : set c = adic() : for each b in a.properties_ : call dic(c, b.name, b.value) : next : call dic(d,count,c) : count = count + 1 : next : set filteredquery2d = d : end if : else : iecho("(wm.filteredquery2d) => wants (string)") : end if : else : iecho("(wm.filteredquery2d) => unfilled condition. check computer/class name or pinging to host") : end if : if not isobject(filteredquery2d) then : set filteredquery2d = adic() : end if : end function
 '*wm_fq(string) :: wm_filteredquery
-''*fq(string) :: filteredquery
 public function fq(f) : set fq = filteredquery(f) : end function
 '*wm_fq2d(string) :: wm_filteredquery2d
-''*fq2d(string) :: filteredquery2d
 public function fq2d(f) : set fq2d = filteredquery2d(f) : end function
-'functions - check class -----------------------------------
 '?wm_hasproperty(string) :: isstring, rmatchi, iecho
-''?hasproperty(string) :: isstring, rmatchi, iecho
 private function hasproperty(f) : hasproperty = false : if isstring(f) then : dim a,b : for each a in q() : for each b in a.properties_ : if rmatchi(b.name,f) then : hasproperty = true : exit for : end if : next : exit for : next : else : iecho("(wm.hasproperty) => wants (string)") : end if : end function : 
-'wm_g(string) :: 
-''g(string) :: \wmi.get()\
+'wm_g(string) :: \\
 public function g(s) : set g = w("srvex").get(s) : end function
-'functions - debug -----------------------------------------
-'wm_dump() :: dumper
-''dump() :: dumper
+'wm_dumper() :: \\
 public function dump() : dumper(w) : end function
-'----------------------------------------------------------
 end class
 
-class ring_buffer
-	private s
-	private b
-	private i
-	private f
-	private sub class_initialize()
-		s = 10
-		b = array()
-		redim preserve b(s)
-		i = 0
-		f = false
-	end sub
-	private sub class_terminate()
-	end sub
-	public property let size(n)
-		if not (s=n) then
-			s = n
-			redim preserve b(s)
-		end if
-	end property
-	public property get value() 
-		value = b(i)
-	end property
-	public property get dump()
-		dump = b
-	end property
-	public property let value(n)
-		b(i) = n
-		if i<s then
-			i=i+1
-		else
-			i=0
-		end if
-		if f then
-			f = true
-		end if
-	end property
-	public property get position()
-		position = i
-	end property
-	public property get size()
-		size = s
-	end property
-	public property get values()
-		dim buf, ind
-		redim buf(s)
-		for ind=0 to s
-			if i+ind<=s then
-				buf(ind) = b(i+ind)
-			else
-				buf(ind) = b(i+ind-s-1)
-			end if
-		next
-		values = buf
-	end property
-	public function flush()
-		redim b(s)
-	end function
-	public function [get](n)
-		if n<=s then
-			[get] = b(n)
-		else
-			[get] = empty
-		end if
-	end function
-	public property get last
-		if i=0 then
-			last = s
-		else
-			last = i-1
-		end if
-	end property
-	public property get [next]
-		if i+1=s then
-			[next] = 0
-		else
-			[next] = i+1
-		end if
-	end property
-end class
+'rb for ring buffer
+class rb
+private sz,buf,ind,flg,mflg
+'rb_class_initialize() :: rb_let_size \\
+private sub class_initialize() : buf = array() : mflg = array() : size = 1 : flg = false : end sub
+'rb_class_terminate() :: \\
+private sub class_terminate() : end sub
+'+rb_get_size() :: \\
+public property get size : size = sz : end property
+'+rb_get_buffer() :: \\
+public property get buffer : buffer = buf : end property
+'?rb_get_flag() :: \\
+public property get flag : flag = flg : end property
+'+rb_get_mflag() :: \\
+public property get mflag : mflag = mflg : end property
+'+rb_get_value() :: \\
+public property get value : value = buf(ind) : end property
+'+rb_get_pos() :: \\
+public property get pos : pos = ind : end property
 
+'+rb_get_values() :: \\
+public property get values : values = buf : end property
+
+'rb_let_size(integer/long) :: valid_arguments, cerr \\
+public property let size(n) : call valid_arguments("rb_let_size",array(n),array("integer/long")) : if n<1 then : cerr("(rb_let_size) invalid size") : exit property : end if : sz = n-1 : redim buf(sz) : redim mflg(sz) : ind = 0 : flg = false : end property
+'rb_let_value(*) :: valid_arguments, bind, \\
+public property let value(n) : call valid_arguments("rb_let_value",array(n),array("*")) : call bind(buf(ind), n) : mflg(ind) = timer : if ind+1>sz then : ind = 0 : else : ind = ind+1 : end if : flg = true : end property
+
+'rb_dump() :: cout, iif, \\
+public function dump() : dim i : for i=0 to sz : cout(iif(ind=i,"->","")&"buffer("&i&") ["&mflg(i)&"] "&typename(buf(i))&"("&iif(isobject(buf(i)),"*",buf(i))&")") : next : end function
+'rb_resize(integer/long) :: cerr, \\
+public function resize(n) : call valid_arguments("rb_resize",array(n),array("integer/long")) : if n<1 then : cerr("(rb_resize) invalid value") : exit function : end if : sz = n-1 : redim preserve buf(sz) : redim preserve mflg(sz) : if flg and ind>=ubound(buf)+1 then : ind=0 : end if : end function
+'rb_movepos2empty() :: \\
+public function movepos2empty() : dim i : for i=0 to sz : if isempty(mflg(i)) then : ind = i : exit for : end if : next : end function
+'rb_movepos(integer/long) :: \\
+public function movepos(n) : if not n=0 then : n = (n mod (sz+1)) : if ((ind+n) mod (sz+1))<0 then : ind = sz+1+ind+n : else : ind = ind+n : end if : end if : end function
+'rb_flush()
+public function flush() : redim buf(sz) : end function
+end class
 
 '<!-- this line works as delimitre -->
 'script starts here
 
-
-
-
-
+'dim conf : set conf = skelconfig()
+'dumper(conf)
 
 
 ]]>
